@@ -1,5 +1,10 @@
 <script lang="ts">
   import { activeChannel } from '../../lib/stores/ui';
+  import { chatConnectionStatus, messagesByChannel } from './messages.store';
+  import MessageItem from './MessageItem.svelte';
+  import MessageInput from './MessageInput.svelte';
+
+  $: currentMessages = $activeChannel ? ($messagesByChannel[$activeChannel.uuid] ?? []) : [];
 </script>
 
 <section class="flex min-w-0 flex-1 flex-col bg-app-850" aria-label="Chat">
@@ -10,13 +15,25 @@
     {:else}
       <h2>Wybierz kanał</h2>
     {/if}
+
+    <span class="ml-auto rounded bg-slate-800 px-2 py-0.5 text-xs font-normal text-slate-400">
+      WS: {$chatConnectionStatus}
+    </span>
   </header>
 
-  <div class="p-4 text-sm text-slate-400">
-    {#if $activeChannel}
-      Wiadomości dla kanału <strong class="text-slate-200">#{$activeChannel.name}</strong> pojawią się tutaj.
-    {:else}
-      Wybierz serwer i kanał, aby rozpocząć rozmowę.
-    {/if}
+  <div class="flex min-h-0 flex-1 flex-col">
+    <div class="flex-1 space-y-1 overflow-auto p-3">
+      {#if !$activeChannel}
+        <p class="text-sm text-slate-400">Wybierz serwer i kanał, aby rozpocząć rozmowę.</p>
+      {:else if currentMessages.length === 0}
+        <p class="text-sm text-slate-400">Brak wiadomości na tym kanale.</p>
+      {:else}
+        {#each currentMessages as message (message.uuid)}
+          <MessageItem {message} />
+        {/each}
+      {/if}
+    </div>
+
+    <MessageInput />
   </div>
 </section>
