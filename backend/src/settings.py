@@ -35,9 +35,11 @@ INSTALLED_APPS = [
     "drf_spectacular",
     "debug_toolbar",
     "django_celery_beat",
-
     "src.apps.user",
     "src.apps.profile",
+    "src.apps.server",
+    "src.apps.chat",
+    "src.apps.gateway",
 ]
 
 MIDDLEWARE = [
