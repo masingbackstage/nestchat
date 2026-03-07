@@ -30,7 +30,7 @@ type FetchDirection = 'initial' | 'older' | 'newer';
 
 const PAGE_LIMIT = 50;
 const CHANNEL_MESSAGES_CACHE_TTL_MS = 60_000;
-const MAX_MESSAGES_PER_CHANNEL = 300;
+export const MAX_MESSAGES_PER_CHANNEL = 300;
 
 const defaultQueryState: ChannelQueryState = {
   fetchedAt: null,
@@ -49,6 +49,7 @@ const defaultQueryState: ChannelQueryState = {
 export const messagesByChannel = writable<MessagesByChannel>({});
 export const chatConnectionStatus = writable<ConnectionStatus>('idle');
 export const channelQueryStateById = writable<Record<string, ChannelQueryState>>({});
+export const unreadCountByChannel = writable<Record<string, number>>({});
 
 const inFlightInitialByChannel: Record<string, Promise<void> | undefined> = {};
 const inFlightOlderByChannel: Record<string, Promise<void> | undefined> = {};
@@ -57,6 +58,10 @@ const requestIdCounterByChannel: Record<string, number> = {};
 
 function getToken(): string | null {
   return import.meta.env.VITE_API_TOKEN ?? localStorage.getItem('access_token');
+}
+
+function getBaseUrl(): string | null {
+  return import.meta.env.VITE_API_URL ?? null;
 }
 
 function getChannelState(channelUuid: string): ChannelQueryState {
@@ -182,7 +187,7 @@ async function fetchMessagesPage(
     after?: string | null;
   },
 ): Promise<NormalizedPaginatedPayload> {
-  const baseUrl = import.meta.env.VITE_API_URL;
+  const baseUrl = getBaseUrl();
   const token = getToken();
 
   if (!baseUrl) {
@@ -384,6 +389,11 @@ export async function ensureChannelMessages(channelUuid: string): Promise<void> 
   void fetchInitialMessages(channelUuid, true);
 }
 
+function getLatestMessageCursor(channelUuid: string): string | null {
+  const messages = get(messagesByChannel)[channelUuid] ?? [];
+  return buildCursorFromMessage(getEdgeMessage(messages, 'newest'));
+}
+
 export async function loadOlderMessages(channelUuid: string): Promise<void> {
   const state = getChannelState(channelUuid);
   const inFlight = inFlightOlderByChannel[channelUuid];
@@ -444,6 +454,109 @@ export async function loadNewerMessages(channelUuid: string): Promise<void> {
 
   inFlightNewerByChannel[channelUuid] = task;
   return task;
+}
+
+export async function syncChannelFromLatestCursor(channelUuid: string): Promise<void> {
+  const inFlight = inFlightNewerByChannel[channelUuid];
+  if (inFlight) {
+    return inFlight;
+  }
+
+  const afterCursor = getLatestMessageCursor(channelUuid);
+  if (!afterCursor) {
+    return;
+  }
+
+  patchChannelState(channelUuid, {
+    isLoadingNewer: true,
+    error: null,
+  });
+
+  const task = (async () => {
+    try {
+      await fetchAndMerge(channelUuid, 'newer', {
+        after: afterCursor,
+      });
+    } catch (error) {
+      patchChannelState(channelUuid, {
+        isLoadingNewer: false,
+        error: error instanceof Error ? error.message : 'Błąd synchronizacji wiadomości.',
+      });
+    } finally {
+      inFlightNewerByChannel[channelUuid] = undefined;
+    }
+  })();
+
+  inFlightNewerByChannel[channelUuid] = task;
+  return task;
+}
+
+export function incrementUnreadCount(channelUuid: string): void {
+  unreadCountByChannel.update((current) => ({
+    ...current,
+    [channelUuid]: (current[channelUuid] ?? 0) + 1,
+  }));
+}
+
+export function setUnreadCount(channelUuid: string, unreadCount: number): void {
+  unreadCountByChannel.update((current) => ({
+    ...current,
+    [channelUuid]: Math.max(0, unreadCount),
+  }));
+}
+
+export async function fetchChannelReadState(channelUuid: string): Promise<void> {
+  const baseUrl = getBaseUrl();
+  const token = getToken();
+  if (!baseUrl || !token) {
+    return;
+  }
+
+  const params = new URLSearchParams({ channel_uuid: channelUuid });
+  const response = await fetch(`${baseUrl}/chat/read-state/?${params.toString()}`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+
+  if (!response.ok) {
+    return;
+  }
+
+  const payload = (await response.json()) as {
+    unreadCount?: number;
+    unread_count?: number;
+  };
+  const unread = Number(payload.unreadCount ?? payload.unread_count ?? 0);
+  setUnreadCount(channelUuid, unread);
+}
+
+export async function markChannelAsRead(
+  channelUuid: string,
+  lastReadMessageUuid?: string,
+): Promise<void> {
+  const baseUrl = getBaseUrl();
+  const token = getToken();
+  if (!baseUrl || !token) {
+    return;
+  }
+
+  const body: Record<string, string> = { channel_uuid: channelUuid };
+  if (lastReadMessageUuid) {
+    body.last_read_message_uuid = lastReadMessageUuid;
+  }
+
+  const response = await fetch(`${baseUrl}/chat/read-state/`, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${token}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(body),
+  });
+  if (!response.ok) {
+    return;
+  }
+
+  setUnreadCount(channelUuid, 0);
 }
 
 export function addMessage(message: Message): void {
@@ -509,4 +622,9 @@ export function clearMessagesForChannel(channelUuid: string): void {
     wasNewerTrimmed: false,
     error: null,
   });
+
+  unreadCountByChannel.update((current) => ({
+    ...current,
+    [channelUuid]: 0,
+  }));
 }

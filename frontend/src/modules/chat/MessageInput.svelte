@@ -2,8 +2,41 @@
   import { activeChannel } from '../../lib/stores/ui';
   import { sendChatMessage } from '../../lib/socket';
 
+  const DRAFTS_STORAGE_KEY = 'chat_channel_drafts_v1';
+
   let content = '';
   let localError = '';
+  let currentDraftChannelUuid: string | null = null;
+  let draftsByChannel: Record<string, string> = {};
+
+  function loadDraftsFromStorage(): void {
+    try {
+      const raw = localStorage.getItem(DRAFTS_STORAGE_KEY);
+      if (!raw) {
+        draftsByChannel = {};
+        return;
+      }
+      const parsed = JSON.parse(raw) as Record<string, string>;
+      draftsByChannel = parsed ?? {};
+    } catch {
+      draftsByChannel = {};
+    }
+  }
+
+  function saveDraftsToStorage(): void {
+    localStorage.setItem(DRAFTS_STORAGE_KEY, JSON.stringify(draftsByChannel));
+  }
+
+  function setDraft(channelUuid: string, value: string): void {
+    if (value.trim().length === 0) {
+      draftsByChannel = Object.fromEntries(
+        Object.entries(draftsByChannel).filter(([uuid]) => uuid !== channelUuid),
+      );
+    } else {
+      draftsByChannel[channelUuid] = value;
+    }
+    saveDraftsToStorage();
+  }
 
   function submitMessage(): void {
     const trimmed = content.trim();
@@ -19,6 +52,7 @@
 
     content = '';
     localError = '';
+    setDraft($activeChannel.uuid, '');
   }
 
   function handleKeydown(event: KeyboardEvent): void {
@@ -26,6 +60,21 @@
       event.preventDefault();
       submitMessage();
     }
+  }
+
+  loadDraftsFromStorage();
+
+  $: activeUuid = $activeChannel?.uuid ?? null;
+  $: if (activeUuid !== currentDraftChannelUuid) {
+    if (currentDraftChannelUuid) {
+      setDraft(currentDraftChannelUuid, content);
+    }
+    currentDraftChannelUuid = activeUuid;
+    content = activeUuid ? (draftsByChannel[activeUuid] ?? '') : '';
+  }
+
+  $: if (currentDraftChannelUuid) {
+    setDraft(currentDraftChannelUuid, content);
   }
 </script>
 

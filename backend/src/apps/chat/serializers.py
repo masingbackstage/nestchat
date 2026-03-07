@@ -30,3 +30,14 @@ class ReceiveMessageSerializer(serializers.Serializer):
             "max_length": "Message is too long, max 4000 symbols",
         },
     )
+
+
+class ChannelReadStateSerializer(serializers.Serializer):
+    channel_uuid = serializers.UUIDField()
+    unread_count = serializers.IntegerField(min_value=0)
+    last_read_message_uuid = serializers.UUIDField(allow_null=True)
+
+
+class ChannelMarkReadSerializer(serializers.Serializer):
+    channel_uuid = serializers.UUIDField()
+    last_read_message_uuid = serializers.UUIDField(required=False, allow_null=True)

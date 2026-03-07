@@ -20,6 +20,12 @@ class Message(models.Model):
 
     class Meta:
         ordering = ["created_at"]
+        indexes = [
+            models.Index(
+                fields=["channel", "created_at", "uuid"],
+                name="chat_msg_ch_ct_uuid_idx",
+            )
+        ]
 
     def __str__(self):
         return f"[{self.channel.name}] {self.author.email}: {self.content[:30]}"

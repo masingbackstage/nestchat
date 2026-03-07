@@ -5,11 +5,16 @@ from django.utils import timezone
 from django.utils.dateparse import parse_datetime
 from drf_spectacular.types import OpenApiTypes
 from drf_spectacular.utils import OpenApiParameter, OpenApiResponse, extend_schema
-from rest_framework import exceptions, permissions, viewsets
+from rest_framework import exceptions, permissions, status, viewsets
+from rest_framework.views import APIView
 from rest_framework.response import Response
 
-from .models import Message
-from .serializers import MessageReadSerializer
+from .models import ChannelReadState, Message
+from .serializers import (
+    ChannelMarkReadSerializer,
+    ChannelReadStateSerializer,
+    MessageReadSerializer,
+)
 from .services import ChannelNotFound, ChannelPermissionDenied, get_channel_for_user_or_raise
 
 
@@ -189,3 +194,91 @@ class MessageViewSet(viewsets.ReadOnlyModelViewSet):
 
     def build_cursor(self, message):
         return f"{message.created_at.isoformat()}|{message.uuid}"
+
+
+class ChannelReadStateAPIView(APIView):
+    permission_classes = [permissions.IsAuthenticated]
+
+    @extend_schema(
+        parameters=[
+            OpenApiParameter(
+                name="channel_uuid",
+                required=True,
+                type=OpenApiTypes.UUID,
+                location=OpenApiParameter.QUERY,
+            )
+        ],
+        responses={200: ChannelReadStateSerializer},
+    )
+    def get(self, request):
+        channel_uuid = request.query_params.get("channel_uuid")
+        if not channel_uuid:
+            raise exceptions.ValidationError({"channel_uuid": "This query parameter is required."})
+
+        channel = self.get_channel_or_raise(channel_uuid)
+        payload = self.build_read_state_payload(request.user, channel)
+        return Response(payload)
+
+    @extend_schema(request=ChannelMarkReadSerializer, responses={200: ChannelReadStateSerializer})
+    def post(self, request):
+        serializer = ChannelMarkReadSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        channel_uuid = serializer.validated_data["channel_uuid"]
+        last_read_message_uuid = serializer.validated_data.get("last_read_message_uuid")
+        channel = self.get_channel_or_raise(channel_uuid)
+
+        last_read_message = None
+        if last_read_message_uuid:
+            last_read_message = Message.objects.filter(
+                uuid=last_read_message_uuid, channel=channel
+            ).first()
+            if last_read_message is None:
+                raise exceptions.ValidationError(
+                    {"last_read_message_uuid": "Message not found in this channel."}
+                )
+        else:
+            last_read_message = (
+                Message.objects.filter(channel=channel).order_by("-created_at", "-uuid").first()
+            )
+
+        ChannelReadState.objects.update_or_create(
+            user=request.user,
+            channel=channel,
+            defaults={"last_read_message": last_read_message},
+        )
+
+        payload = self.build_read_state_payload(request.user, channel)
+        return Response(payload, status=status.HTTP_200_OK)
+
+    def get_channel_or_raise(self, channel_uuid):
+        try:
+            return get_channel_for_user_or_raise(self.request.user, channel_uuid)
+        except ChannelNotFound as exc:
+            raise exceptions.NotFound(exc.detail)
+        except ChannelPermissionDenied as exc:
+            raise exceptions.PermissionDenied(exc.detail)
+
+    def build_read_state_payload(self, user, channel):
+        read_state = (
+            ChannelReadState.objects.filter(user=user, channel=channel)
+            .select_related("last_read_message")
+            .first()
+        )
+        last_read_message = read_state.last_read_message if read_state else None
+
+        if last_read_message is None:
+            unread_count = Message.objects.filter(channel=channel).count()
+            last_read_message_uuid = None
+        else:
+            unread_count = Message.objects.filter(channel=channel).filter(
+                Q(created_at__gt=last_read_message.created_at)
+                | Q(created_at=last_read_message.created_at, uuid__gt=last_read_message.uuid)
+            ).count()
+            last_read_message_uuid = last_read_message.uuid
+
+        return {
+            "channel_uuid": channel.uuid,
+            "unread_count": unread_count,
+            "last_read_message_uuid": last_read_message_uuid,
+        }

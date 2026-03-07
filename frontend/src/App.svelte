@@ -2,14 +2,30 @@
   import { onDestroy, onMount } from 'svelte';
   import { servers } from './lib/stores/servers';
   import { activeServer, activeChannel } from './lib/stores/ui';
-  import { connectGateway, disconnectGateway, subscribeGateway } from './lib/socket';
-  import { addMessage, ensureChannelMessages } from './modules/chat/messages.store';
+  import {
+    connectGateway,
+    disconnectGateway,
+    subscribeGateway,
+    subscribeGatewayReconnect,
+  } from './lib/socket';
+  import {
+    addMessage,
+    ensureChannelMessages,
+    fetchChannelReadState,
+    incrementUnreadCount,
+    markChannelAsRead,
+    messagesByChannel,
+    syncChannelFromLatestCursor,
+  } from './modules/chat/messages.store';
   import type { GatewayMessageEvent, Message, Server } from './types/gateway';
   import ServerList from './modules/servers/ServerList.svelte';
   import ChannelList from './modules/channels/ChannelList.svelte';
   import ChatWindow from './modules/chat/ChatWindow.svelte';
 
   let unsubscribeGateway: (() => void) | null = null;
+  let unsubscribeGatewayReconnect: (() => void) | null = null;
+  const EMPTY_CHANNEL_MARKER = '__empty__';
+  const lastReadMarkerByChannel: Record<string, string | undefined> = {};
 
   function handleGatewayEvent(event: GatewayMessageEvent): void {
     const moduleName = String(event.module ?? '').toLowerCase();
@@ -41,6 +57,14 @@
     };
 
     addMessage(message);
+    if ($activeChannel?.uuid !== channelUuid) {
+      incrementUnreadCount(channelUuid);
+    }
+  }
+
+  async function resyncAfterReconnect(): Promise<void> {
+    const channels = Object.keys($messagesByChannel);
+    await Promise.all(channels.map((channelUuid) => syncChannelFromLatestCursor(channelUuid)));
   }
 
   async function loadServers(): Promise<void> {
@@ -74,7 +98,13 @@
       if (token) {
         connectGateway(token);
         unsubscribeGateway = subscribeGateway(handleGatewayEvent);
+        unsubscribeGatewayReconnect = subscribeGatewayReconnect(() => {
+          void resyncAfterReconnect();
+        });
       }
+
+      const channelUuids = data.flatMap((serverItem) => serverItem.channels.map((channel) => channel.uuid));
+      await Promise.all(channelUuids.map((channelUuid) => fetchChannelReadState(channelUuid)));
     } catch (error) {
       console.error('Błąd ładowania serwerów:', error);
       servers.set([]);
@@ -89,8 +119,23 @@
     ensureChannelMessages($activeChannel.uuid);
   }
 
+  $: if ($activeChannel?.uuid) {
+    const channelUuid = $activeChannel.uuid;
+    const messages = $messagesByChannel[channelUuid] ?? [];
+    const latestMessageUuid = messages[messages.length - 1]?.uuid;
+
+    if (latestMessageUuid && lastReadMarkerByChannel[channelUuid] !== latestMessageUuid) {
+      lastReadMarkerByChannel[channelUuid] = latestMessageUuid;
+      void markChannelAsRead(channelUuid, latestMessageUuid);
+    } else if (!latestMessageUuid && lastReadMarkerByChannel[channelUuid] !== EMPTY_CHANNEL_MARKER) {
+      lastReadMarkerByChannel[channelUuid] = EMPTY_CHANNEL_MARKER;
+      void fetchChannelReadState(channelUuid);
+    }
+  }
+
   onDestroy(() => {
     unsubscribeGateway?.();
+    unsubscribeGatewayReconnect?.();
     disconnectGateway();
   });
 </script>

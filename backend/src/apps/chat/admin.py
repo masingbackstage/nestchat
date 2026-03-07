@@ -1,6 +1,6 @@
 from django.contrib import admin
 
-from .models import Message
+from .models import ChannelReadState, Message
 
 
 @admin.register(Message)
@@ -13,3 +13,11 @@ class MessageAdmin(admin.ModelAdmin):
         "created_at",
     )
     list_select_related = ("author", "channel")
+
+
+@admin.register(ChannelReadState)
+class ChannelReadStateAdmin(admin.ModelAdmin):
+    list_display = ("uuid", "user", "channel", "last_read_message", "updated_at")
+    list_filter = ("channel", "user")
+    readonly_fields = ("uuid", "updated_at")
+    list_select_related = ("user", "channel", "last_read_message")

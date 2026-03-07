@@ -2,6 +2,7 @@
   import { tick } from 'svelte';
   import { activeChannel } from '../../lib/stores/ui';
   import {
+    MAX_MESSAGES_PER_CHANNEL,
     channelQueryStateById,
     chatConnectionStatus,
     loadNewerMessages,
@@ -17,6 +18,7 @@
   let lastAutoScrolledChannelUuid: string | null = null;
   let previousChannelUuid: string | null = null;
   let previousMessageCount = 0;
+  let isViewportNearBottom = true;
 
   $: currentMessages = $activeChannel ? ($messagesByChannel[$activeChannel.uuid] ?? []) : [];
   $: currentChannelQuery = $activeChannel ? $channelQueryStateById[$activeChannel.uuid] : null;
@@ -42,9 +44,11 @@
 
     previousChannelUuid = $activeChannel.uuid;
     previousMessageCount = currentMessages.length;
+    isViewportNearBottom = isNearBottom(messagesContainer);
   } else if (!$activeChannel?.uuid) {
     previousChannelUuid = null;
     previousMessageCount = 0;
+    isViewportNearBottom = true;
   }
 
   async function scrollToBottomForChannel(channelUuid: string): Promise<void> {
@@ -55,6 +59,7 @@
 
     messagesContainer.scrollTop = messagesContainer.scrollHeight;
     lastAutoScrolledChannelUuid = channelUuid;
+    isViewportNearBottom = true;
   }
 
   async function maybeLoadOlderMessages(): Promise<void> {
@@ -82,6 +87,7 @@
     if (messagesContainer) {
       const delta = messagesContainer.scrollHeight - previousScrollHeight;
       messagesContainer.scrollTop += Math.max(0, delta);
+      isViewportNearBottom = isNearBottom(messagesContainer);
     }
 
     loadingOlderFromScroll = false;
@@ -120,14 +126,32 @@
         0,
         messagesContainer.scrollHeight - messagesContainer.clientHeight - previousFromBottom,
       );
+      isViewportNearBottom = isNearBottom(messagesContainer);
     }
 
     loadingNewerFromScroll = false;
   }
 
   function handleScroll(): void {
+    if (messagesContainer) {
+      isViewportNearBottom = isNearBottom(messagesContainer);
+    }
     void maybeLoadOlderMessages();
     void maybeLoadNewerMessages();
+  }
+
+  async function jumpToLatest(): Promise<void> {
+    if (!$activeChannel || !messagesContainer) {
+      return;
+    }
+
+    if (currentChannelQuery?.hasMoreNewer && !currentChannelQuery.isLoadingNewer) {
+      await loadNewerMessages($activeChannel.uuid);
+      await tick();
+    }
+
+    messagesContainer.scrollTop = messagesContainer.scrollHeight;
+    isViewportNearBottom = true;
   }
 </script>
 
@@ -138,6 +162,9 @@
     {#if $activeChannel}
       <span aria-hidden="true" class="text-slate-500">#</span>
       <h2 class="truncate">{$activeChannel.name}</h2>
+      <span class="rounded bg-slate-800 px-2 py-0.5 text-xs font-normal text-slate-400">
+        {currentMessages.length}/{MAX_MESSAGES_PER_CHANNEL}
+      </span>
     {:else}
       <h2>Wybierz kanał</h2>
     {/if}
@@ -177,16 +204,24 @@
         </p>
       {/if}
 
-      {#if $activeChannel && (currentChannelQuery?.isLoadingNewer || currentChannelQuery?.hasMoreNewer)}
+      {#if $activeChannel && currentChannelQuery?.isLoadingNewer}
         <p class="mt-2 text-xs text-slate-400">
-          {#if currentChannelQuery?.isLoadingNewer}
-            Ładowanie nowszych wiadomości...
-          {:else}
-            Dostępne nowsze wiadomości.
-          {/if}
+          Ładowanie nowszych wiadomości...
         </p>
       {/if}
     </div>
+
+    {#if $activeChannel && currentChannelQuery?.hasMoreNewer && !isViewportNearBottom}
+      <div class="px-3 pb-2">
+        <button
+          type="button"
+          class="rounded-full border border-emerald-500/30 bg-emerald-500/10 px-3 py-1 text-xs text-emerald-200 transition hover:bg-emerald-500/20"
+          on:click={jumpToLatest}
+        >
+          Dostępne nowsze wiadomości
+        </button>
+      </div>
+    {/if}
 
     <MessageInput />
   </div>

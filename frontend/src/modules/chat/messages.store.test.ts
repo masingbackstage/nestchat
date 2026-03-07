@@ -29,6 +29,7 @@ type ApiResponse = {
 
 type QueryState = {
   hasMoreNewer: boolean;
+  isLoadingInitial?: boolean;
 };
 
 type StoreModule = {
@@ -218,5 +219,47 @@ describe('messages.store pagination window', () => {
     const messages = get(store.messagesByChannel)[CHANNEL_UUID] ?? [];
     const occurrences = messages.filter((item) => item.uuid === sameUuid).length;
     expect(occurrences).toBe(1);
+  });
+
+  it('does not refetch when cache is still fresh (< TTL)', async () => {
+    const dataset = makeDataset(80);
+    const fetchMock = createFetchMock(dataset);
+    vi.stubGlobal('fetch', fetchMock);
+
+    const nowSpy = vi.spyOn(Date, 'now');
+    nowSpy.mockReturnValue(1_000_000);
+
+    const store = await loadStoreModule();
+    await store.ensureChannelMessages(CHANNEL_UUID);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+
+    nowSpy.mockReturnValue(1_030_000);
+    await store.ensureChannelMessages(CHANNEL_UUID);
+
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('keeps data and triggers background revalidate when cache is stale (> TTL)', async () => {
+    const dataset = makeDataset(80);
+    const fetchMock = createFetchMock(dataset);
+    vi.stubGlobal('fetch', fetchMock);
+
+    const nowSpy = vi.spyOn(Date, 'now');
+    nowSpy.mockReturnValue(1_000_000);
+
+    const store = await loadStoreModule();
+    await store.ensureChannelMessages(CHANNEL_UUID);
+
+    const beforeStaleRefresh = (get(store.messagesByChannel)[CHANNEL_UUID] ?? []).length;
+    expect(beforeStaleRefresh).toBeGreaterThan(0);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+
+    nowSpy.mockReturnValue(1_070_000);
+    await store.ensureChannelMessages(CHANNEL_UUID);
+
+    const queryState = get(store.channelQueryStateById)[CHANNEL_UUID];
+    expect(queryState?.isLoadingInitial).toBe(false);
+    expect((get(store.messagesByChannel)[CHANNEL_UUID] ?? []).length).toBe(beforeStaleRefresh);
+    expect(fetchMock).toHaveBeenCalledTimes(2);
   });
 });
