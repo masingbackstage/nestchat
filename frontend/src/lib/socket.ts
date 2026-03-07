@@ -12,7 +12,10 @@ function createWsUrl(base: string, token: string): string {
 }
 
 export function connectGateway(token: string): void {
-  if (socket && (socket.readyState === WebSocket.OPEN || socket.readyState === WebSocket.CONNECTING)) {
+  if (
+    socket &&
+    (socket.readyState === WebSocket.OPEN || socket.readyState === WebSocket.CONNECTING)
+  ) {
     return;
   }
 
@@ -79,9 +82,9 @@ export function sendChatMessage(channelUuid: string, content: string): boolean {
       action: 'SEND_MESSAGE',
       payload: {
         channel_uuid: channelUuid,
-        content
-      }
-    })
+        content,
+      },
+    }),
   );
 
   return true;

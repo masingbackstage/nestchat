@@ -34,6 +34,7 @@ services:
       - "5672:5672"
       - "15672:15672"
     volumes:
+      - ./rabbitmq.conf:/etc/rabbitmq/rabbitmq.conf:ro
       - rabbitmq_data:/var/lib/rabbitmq
 
   livekit:

@@ -1,7 +1,5 @@
 import uuid
-
 from django.db import models
-
 from src.apps.server.enums import ChannelType
 
 
@@ -13,6 +11,10 @@ class Channel(models.Model):
     channel_type = models.CharField(
         choices=ChannelType.choices, max_length=5, default=ChannelType.TEXT
     )
+
+    is_public = models.BooleanField(default=True)
+    allowed_roles = models.ManyToManyField('server.Role', blank=True, related_name="allowed_channels")
+
     created_at = models.DateTimeField(auto_now_add=True)
 
     def __str__(self):

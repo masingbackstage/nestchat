@@ -3,7 +3,7 @@
   import { servers } from './lib/stores/servers';
   import { activeServer, activeChannel } from './lib/stores/ui';
   import { connectGateway, disconnectGateway, subscribeGateway } from './lib/socket';
-  import { addMessage } from './modules/chat/messages.store';
+  import { addMessage, ensureChannelMessages } from './modules/chat/messages.store';
   import type { GatewayMessageEvent, Message, Server } from './types/gateway';
   import ServerList from './modules/servers/ServerList.svelte';
   import ChannelList from './modules/channels/ChannelList.svelte';
@@ -37,7 +37,7 @@
       channel_uuid: channelUuid,
       content: payload.content,
       author: payload.author,
-      created_at: new Date().toISOString()
+      created_at: new Date().toISOString(),
     };
 
     addMessage(message);
@@ -57,7 +57,7 @@
 
     try {
       const response = await fetch(`${baseUrl}/servers/`, {
-        headers: token ? { Authorization: `Bearer ${token}` } : {}
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
       });
 
       if (!response.ok) {
@@ -84,6 +84,10 @@
   }
 
   onMount(loadServers);
+
+  $: if ($activeChannel?.uuid) {
+    ensureChannelMessages($activeChannel.uuid);
+  }
 
   onDestroy(() => {
     unsubscribeGateway?.();

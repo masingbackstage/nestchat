@@ -9,7 +9,10 @@
   }
 </script>
 
-<aside class="flex w-[72px] shrink-0 flex-col items-center gap-2 border-r border-slate-800 bg-app-950 px-2.5 py-3" aria-label="Servers">
+<aside
+  class="flex w-[72px] shrink-0 flex-col items-center gap-2 border-r border-slate-800 bg-app-950 px-2.5 py-3"
+  aria-label="Servers"
+>
   {#each $servers as server}
     <button
       type="button"

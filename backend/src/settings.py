@@ -152,8 +152,8 @@ REST_SESSION_LOGIN = False
 SIMPLE_JWT = {
     "ACCESS_TOKEN_LIFETIME": timedelta(minutes=60),
     "REFRESH_TOKEN_LIFETIME": timedelta(days=7),
-    "USER_ID_FIELD": "id",
-    "USER_ID_CLAIM": "user_id",
+    "USER_ID_FIELD": "uuid",
+    "USER_ID_CLAIM": "user_uuid",
 }
 
 

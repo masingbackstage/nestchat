@@ -14,8 +14,15 @@ def get_user_from_jwt(token):
     try:
         payload = jwt.decode(token, settings.SECRET_KEY, algorithms=["HS256"])
 
-        user_id = payload.get("user_id")
-        return User.objects.get(id=user_id)
+        jwt_settings = getattr(settings, "SIMPLE_JWT", {})
+        user_id_claim = jwt_settings.get("USER_ID_CLAIM", "user_id")
+        user_id_field = jwt_settings.get("USER_ID_FIELD", "id")
+
+        user_identifier = payload.get(user_id_claim)
+        if user_identifier is None:
+            return AnonymousUser()
+
+        return User.objects.get(**{user_id_field: user_identifier})
 
     except (jwt.ExpiredSignatureError, jwt.InvalidTokenError, User.DoesNotExist):
         return AnonymousUser()

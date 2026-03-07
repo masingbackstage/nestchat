@@ -1,5 +1,22 @@
 from rest_framework import serializers
 
+from src.apps.chat.models import Message
+
+
+class MessageReadSerializer(serializers.ModelSerializer):
+    author_profile_display_name = serializers.ReadOnlyField(source='author.profile.display_name')
+
+    class Meta:
+        model = Message
+        fields = [
+            'uuid',
+            'author',
+            'author_profile_display_name',
+            'content',
+            'created_at',
+            'updated_at'
+        ]
+        read_only_fields = fields
 
 class ReceiveMessageSerializer(serializers.Serializer):
     channel_uuid = serializers.UUIDField()

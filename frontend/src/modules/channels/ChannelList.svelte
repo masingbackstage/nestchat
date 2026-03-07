@@ -7,9 +7,14 @@
   }
 </script>
 
-<nav class="flex w-[260px] shrink-0 flex-col border-r border-slate-800 bg-app-900" aria-label="Channels">
+<nav
+  class="flex w-[260px] shrink-0 flex-col border-r border-slate-800 bg-app-900"
+  aria-label="Channels"
+>
   {#if $activeServer}
-    <header class="flex h-12 items-center border-b border-slate-800 px-3.5 text-sm font-bold text-white">
+    <header
+      class="flex h-12 items-center border-b border-slate-800 px-3.5 text-sm font-bold text-white"
+    >
       {$activeServer.name}
     </header>
 

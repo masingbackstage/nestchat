@@ -10,7 +10,7 @@ DOCKER_EXEC = $(DOCKER_COMPOSE) exec $(BACKEND_CONTAINER)
 
 DJANGO_MANAGE = python manage.py
 
-.PHONY: build up up-build migrate migrations backend-bash django-shell format superuser restart-celery static
+.PHONY: build up up-build migrate migrations backend-bash django-shell format superuser restart-celery static test test-chat-gateway
 
 build:
 	$(DOCKER_COMPOSE) build
@@ -56,7 +56,12 @@ recreate-db:
 	make migrate
 
 test:
-	$(DOCKER_RUN) pytest
+	$(DOCKER_COMPOSE) up -d $(DB_CONTAINER) $(BACKEND_CONTAINER)
+	$(DOCKER_EXEC) bash -lc "cd /backend && poetry run pytest -q"
+
+test-chat-gateway:
+	$(DOCKER_COMPOSE) up -d $(DB_CONTAINER) $(BACKEND_CONTAINER)
+	$(DOCKER_EXEC) bash -lc "cd /backend && poetry run pytest -q src/apps/chat/tests src/apps/gateway/tests"
 
 restart-celery:
 	$(DOCKER_COMPOSE) restart $(CELERY_CONTAINER)

@@ -4,6 +4,11 @@ from channels.db import database_sync_to_async
 from channels.generic.websocket import AsyncWebsocketConsumer
 
 from src.apps.chat.models import Message
+from src.apps.chat.services import (
+    ChannelNotFound,
+    ChannelPermissionDenied,
+    get_channel_for_user_or_raise,
+)
 from src.apps.gateway.enums import ChatAction, ModuleType
 from src.apps.gateway.serializers import GatewayRequestSerializer
 from src.apps.profile.models import Profile
@@ -22,7 +27,7 @@ class GatewayConsumer(AsyncWebsocketConsumer):
 
         await self.set_online_status(True)
 
-        self.personal_group = f"user_{self.user.id}"
+        self.personal_group = f"user_{self.user.pk}"
         await self.channel_layer.group_add(self.personal_group, self.channel_name)
 
         self.channel_groups = await self.get_user_channel_groups()
@@ -74,7 +79,28 @@ class GatewayConsumer(AsyncWebsocketConsumer):
             channel_uuid = payload["channel_uuid"]
             content = payload["content"]
 
-            message = await self.save_message(channel_uuid, content)
+            try:
+                channel = await self.get_allowed_channel(channel_uuid)
+            except ChannelNotFound as exc:
+                await self.gateway_send(
+                    {
+                        "module": "system",
+                        "action": "error",
+                        "payload": {"code": exc.code, "detail": exc.detail},
+                    }
+                )
+                return
+            except ChannelPermissionDenied as exc:
+                await self.gateway_send(
+                    {
+                        "module": "system",
+                        "action": "error",
+                        "payload": {"code": exc.code, "detail": exc.detail},
+                    }
+                )
+                return
+
+            message = await self.save_message(channel, content)
             author_name = await self.get_author_name()
 
             group_name = f"channel_{channel_uuid}"
@@ -112,8 +138,11 @@ class GatewayConsumer(AsyncWebsocketConsumer):
         return [f"channel_{channel.uuid}" for channel in channels]
 
     @database_sync_to_async
-    def save_message(self, channel_uuid, content):
-        channel = Channel.objects.get(uuid=channel_uuid)
+    def get_allowed_channel(self, channel_uuid):
+        return get_channel_for_user_or_raise(self.user, channel_uuid)
+
+    @database_sync_to_async
+    def save_message(self, channel, content):
         return Message.objects.create(channel=channel, author=self.user, content=content)
 
     @database_sync_to_async

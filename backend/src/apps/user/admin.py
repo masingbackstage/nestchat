@@ -14,5 +14,5 @@ class ProfileInline(admin.StackedInline):
 
 @admin.register(CustomUser)
 class CustomUserAdmin(admin.ModelAdmin):
-    list_display = ("email", "is_staff", "is_active")
+    list_display = ("uuid", "email", "is_staff", "is_active")
     inlines = (ProfileInline,)
