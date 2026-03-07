@@ -5,14 +5,16 @@ from .models import ChannelReadState, Message
 
 @admin.register(Message)
 class MessageAdmin(admin.ModelAdmin):
-    list_display = ("uuid", "author", "channel", "content", "created_at")
-    list_filter = ("channel", "author")
+    list_display = ("uuid", "author", "channel", "is_deleted", "created_at")
+    list_filter = ("channel", "author", "is_deleted")
     search_fields = ("content",)
     readonly_fields = (
         "uuid",
         "created_at",
+        "updated_at",
+        "deleted_at",
     )
-    list_select_related = ("author", "channel")
+    list_select_related = ("author", "channel", "deleted_by")
 
 
 @admin.register(ChannelReadState)

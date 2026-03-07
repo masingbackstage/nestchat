@@ -1,6 +1,9 @@
 <script lang="ts">
   import { tick } from 'svelte';
-  import { activeChannel } from '../../lib/stores/ui';
+  import { getCurrentUserUuid } from '../../lib/auth';
+  import { sendDeleteMessage, sendEditMessage } from '../../lib/socket';
+  import { pushToast } from '../../lib/stores/toast';
+  import { activeChannel, activeServer } from '../../lib/stores/ui';
   import {
     MAX_MESSAGES_PER_CHANNEL,
     channelQueryStateById,
@@ -21,6 +24,10 @@
   let previousChannelUuid: string | null = null;
   let previousMessageCount = 0;
   let isViewportNearBottom = true;
+  let busyMessageActions = new Set<string>();
+  let currentUserUuid: string | null = null;
+  let pendingDeleteMessageUuid: string | null = null;
+  let isDeleteConfirmSubmitting = false;
 
   $: currentMessages = $activeChannel ? ($messagesByChannel[$activeChannel.uuid] ?? []) : [];
   $: currentChannelQuery = $activeChannel ? $channelQueryStateById[$activeChannel.uuid] : null;
@@ -61,6 +68,7 @@
     previousMessageCount = 0;
     isViewportNearBottom = true;
   }
+  $: currentUserUuid = getCurrentUserUuid();
 
   async function scrollToBottomForChannel(channelUuid: string): Promise<void> {
     await tick();
@@ -183,6 +191,80 @@
 
     return Math.max(0, messages.length - unreadCount);
   }
+
+  function canManageMessage(message: { author_uuid?: string; pending?: boolean; is_deleted?: boolean }): boolean {
+    if (message.pending) {
+      return false;
+    }
+    const isOwner = Boolean($activeServer?.isOwner ?? $activeServer?.is_owner ?? false);
+    const isAuthor = Boolean(currentUserUuid && message.author_uuid === currentUserUuid);
+    return isOwner || isAuthor;
+  }
+
+  function isMessageBusy(messageUuid: string): boolean {
+    return busyMessageActions.has(messageUuid);
+  }
+
+  function markBusy(messageUuid: string, busy: boolean): void {
+    const next = new Set(busyMessageActions);
+    if (busy) {
+      next.add(messageUuid);
+    } else {
+      next.delete(messageUuid);
+    }
+    busyMessageActions = next;
+  }
+
+  async function handleEditMessage(
+    event: CustomEvent<{ messageUuid: string; content: string }>,
+  ): Promise<void> {
+    const { messageUuid, content } = event.detail;
+    markBusy(messageUuid, true);
+    const sent = sendEditMessage(messageUuid, content);
+    if (!sent) {
+      pushToast({ type: 'error', message: 'Brak połączenia z gateway.' });
+    }
+    await tick();
+    markBusy(messageUuid, false);
+  }
+
+  function handleDeleteMessage(event: CustomEvent<{ messageUuid: string }>): void {
+    pendingDeleteMessageUuid = event.detail.messageUuid;
+  }
+
+  function cancelDeleteConfirmation(): void {
+    if (isDeleteConfirmSubmitting) {
+      return;
+    }
+    pendingDeleteMessageUuid = null;
+  }
+
+  function handleDeleteOverlayClick(event: MouseEvent): void {
+    if (event.target === event.currentTarget) {
+      cancelDeleteConfirmation();
+    }
+  }
+
+  async function confirmDeleteMessage(): Promise<void> {
+    if (!pendingDeleteMessageUuid) {
+      return;
+    }
+
+    const messageUuid = pendingDeleteMessageUuid;
+    isDeleteConfirmSubmitting = true;
+    markBusy(messageUuid, true);
+    const sent = sendDeleteMessage(messageUuid);
+    if (!sent) {
+      pushToast({ type: 'error', message: 'Brak połączenia z gateway.' });
+      isDeleteConfirmSubmitting = false;
+      markBusy(messageUuid, false);
+      return;
+    }
+    await tick();
+    pendingDeleteMessageUuid = null;
+    isDeleteConfirmSubmitting = false;
+    markBusy(messageUuid, false);
+  }
 </script>
 
 <section class="flex min-w-0 flex-1 flex-col bg-app-850" aria-label="Chat">
@@ -233,7 +315,13 @@
               <div class="h-px flex-1 bg-emerald-500/40"></div>
             </div>
           {/if}
-          <MessageItem {message} />
+          <MessageItem
+            {message}
+            canManage={canManageMessage(message)}
+            isBusy={isMessageBusy(message.uuid)}
+            on:edit={handleEditMessage}
+            on:delete={handleDeleteMessage}
+          />
         {/each}
       {/if}
 
@@ -265,3 +353,44 @@
     <MessageInput />
   </div>
 </section>
+
+{#if pendingDeleteMessageUuid}
+  <div
+    class="fixed inset-0 z-40 flex items-center justify-center bg-slate-950/70 p-4"
+    role="presentation"
+    on:click={handleDeleteOverlayClick}
+  >
+    <div
+      class="w-full max-w-sm rounded-lg border border-slate-700 bg-slate-900 p-4 shadow-xl"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="delete-message-title"
+      tabindex="-1"
+    >
+      <h3 id="delete-message-title" class="text-base font-semibold text-slate-100">
+        Usunąć wiadomość?
+      </h3>
+      <p class="mt-2 text-sm text-slate-400">
+        Tej operacji nie da się cofnąć.
+      </p>
+      <div class="mt-4 flex items-center justify-end gap-2">
+        <button
+          type="button"
+          class="rounded border border-slate-700 px-3 py-1.5 text-sm text-slate-300 transition hover:border-slate-500 disabled:opacity-60"
+          on:click={cancelDeleteConfirmation}
+          disabled={isDeleteConfirmSubmitting}
+        >
+          Anuluj
+        </button>
+        <button
+          type="button"
+          class="rounded bg-red-600 px-3 py-1.5 text-sm font-medium text-white transition hover:bg-red-500 disabled:opacity-60"
+          on:click={confirmDeleteMessage}
+          disabled={isDeleteConfirmSubmitting}
+        >
+          {isDeleteConfirmSubmitting ? 'Usuwanie...' : 'Usuń'}
+        </button>
+      </div>
+    </div>
+  </div>
+{/if}

@@ -57,6 +57,7 @@ const inFlightInitialByChannel: Record<string, Promise<void> | undefined> = {};
 const inFlightOlderByChannel: Record<string, Promise<void> | undefined> = {};
 const inFlightNewerByChannel: Record<string, Promise<void> | undefined> = {};
 const requestIdCounterByChannel: Record<string, number> = {};
+const deliveredClientIdsByChannel: Record<string, Set<string>> = {};
 
 function getBaseUrl(): string | null {
   return import.meta.env.VITE_API_URL ?? null;
@@ -77,13 +78,20 @@ function patchChannelState(channelUuid: string, patch: Partial<ChannelQueryState
 }
 
 function mapApiMessages(channelUuid: string, items: MessageReadDto[]): Message[] {
-  return items.map((item) => ({
-    uuid: item.uuid,
-    channel_uuid: channelUuid,
-    content: item.content,
-    author: item.authorProfileDisplayName ?? item.author_profile_display_name ?? String(item.author),
-    created_at: item.createdAt ?? item.created_at,
-  }));
+  return items
+    .map((item) => ({
+      uuid: item.uuid,
+      channel_uuid: item.channelUuid ?? item.channel_uuid ?? channelUuid,
+      content: item.content,
+      author: item.authorProfileDisplayName ?? item.author_profile_display_name ?? String(item.author),
+      author_uuid: String(item.author),
+      is_deleted: Boolean(item.isDeleted ?? item.is_deleted ?? false),
+      is_edited: Boolean(item.isEdited ?? item.is_edited ?? false),
+      edited_at: item.editedAt ?? item.edited_at ?? null,
+      created_at: item.createdAt ?? item.created_at,
+      updated_at: item.updatedAt ?? item.updated_at,
+    }))
+    .filter((message) => !message.is_deleted);
 }
 
 function normalizePaginatedPayload(raw: unknown): NormalizedPaginatedPayload {
@@ -118,6 +126,45 @@ function dedupeByUuid(messages: Message[]): Message[] {
     result.push(message);
   }
   return result;
+}
+
+function markClientIdDelivered(channelUuid: string, clientId: string): void {
+  if (!deliveredClientIdsByChannel[channelUuid]) {
+    deliveredClientIdsByChannel[channelUuid] = new Set<string>();
+  }
+  const deliveredSet = deliveredClientIdsByChannel[channelUuid];
+  deliveredSet.add(clientId);
+  if (deliveredSet.size > 500) {
+    const first = deliveredSet.values().next().value;
+    if (first) {
+      deliveredSet.delete(first);
+    }
+  }
+}
+
+export function wasClientIdDelivered(channelUuid: string, clientId: string): boolean {
+  return deliveredClientIdsByChannel[channelUuid]?.has(clientId) ?? false;
+}
+
+function resolveMessageStateAfterAppend(channelUuid: string, messages: Message[]): void {
+  const previousState = getChannelState(channelUuid);
+  const oldestCursor = buildCursorFromMessage(getEdgeMessage(messages, 'oldest'));
+  const newestCursor = buildCursorFromMessage(getEdgeMessage(messages, 'newest'));
+  const hasPending = messages.some((msg) => msg.pending);
+
+  patchChannelState(channelUuid, {
+    fetchedAt: Date.now(),
+    hasMoreOlder: previousState.hasMoreOlder || previousState.wasOlderTrimmed,
+    nextBefore:
+      previousState.hasMoreOlder || previousState.wasOlderTrimmed
+        ? oldestCursor ?? previousState.nextBefore
+        : previousState.nextBefore,
+    hasMoreNewer: hasPending ? true : previousState.hasMoreNewer,
+    nextAfter: newestCursor ?? previousState.nextAfter,
+    wasOlderTrimmed: previousState.wasOlderTrimmed,
+    wasNewerTrimmed: previousState.wasNewerTrimmed,
+    error: null,
+  });
 }
 
 function getEdgeMessage(messages: Message[], edge: 'oldest' | 'newest'): Message | null {
@@ -572,12 +619,35 @@ export async function markChannelAsRead(
 }
 
 export function addMessage(message: Message): void {
+  if (message.is_deleted) {
+    return;
+  }
+
   const currentMessages = get(messagesByChannel)[message.channel_uuid] ?? [];
   if (currentMessages.some((item) => item.uuid === message.uuid)) {
     return;
   }
 
-  const merged = dedupeByUuid([...currentMessages, message]);
+  let mergedBase = [...currentMessages];
+  if (message.client_id) {
+    markClientIdDelivered(message.channel_uuid, message.client_id);
+    const pendingIndex = mergedBase.findIndex(
+      (item) => item.pending && item.client_id === message.client_id,
+    );
+    if (pendingIndex >= 0) {
+      mergedBase[pendingIndex] = {
+        ...message,
+        pending: false,
+        failed: false,
+      };
+    } else {
+      mergedBase.push(message);
+    }
+  } else {
+    mergedBase.push(message);
+  }
+
+  const merged = dedupeByUuid(mergedBase);
   const windowed = applyWindowLimit(merged, 'newer');
 
   messagesByChannel.update((current) => ({
@@ -585,24 +655,107 @@ export function addMessage(message: Message): void {
     [message.channel_uuid]: windowed.windowed,
   }));
 
-  const previousState = getChannelState(message.channel_uuid);
-  const oldestCursor = buildCursorFromMessage(getEdgeMessage(windowed.windowed, 'oldest'));
-  const newestCursor = buildCursorFromMessage(getEdgeMessage(windowed.windowed, 'newest'));
-  const wasOlderTrimmed = previousState.wasOlderTrimmed || windowed.trimmedOlder;
+  resolveMessageStateAfterAppend(message.channel_uuid, windowed.windowed);
+}
 
-  patchChannelState(message.channel_uuid, {
-    fetchedAt: Date.now(),
-    hasMoreOlder: previousState.hasMoreOlder || wasOlderTrimmed,
-    nextBefore:
-      previousState.hasMoreOlder || wasOlderTrimmed
-        ? oldestCursor ?? previousState.nextBefore
-        : previousState.nextBefore,
-    hasMoreNewer: false,
-    nextAfter: newestCursor,
-    wasOlderTrimmed,
-    wasNewerTrimmed: false,
-    error: null,
+export function updateMessage(message: Message): void {
+  const currentMessages = get(messagesByChannel)[message.channel_uuid] ?? [];
+  const index = currentMessages.findIndex((item) => item.uuid === message.uuid);
+  if (index < 0) {
+    return;
+  }
+
+  if (message.is_deleted) {
+    const withoutDeleted = currentMessages.filter((item) => item.uuid !== message.uuid);
+    messagesByChannel.update((current) => ({
+      ...current,
+      [message.channel_uuid]: withoutDeleted,
+    }));
+    return;
+  }
+
+  const updatedMessages = [...currentMessages];
+  updatedMessages[index] = {
+    ...updatedMessages[index],
+    ...message,
+    pending: false,
+    failed: false,
+  };
+
+  messagesByChannel.update((current) => ({
+    ...current,
+    [message.channel_uuid]: updatedMessages,
+  }));
+}
+
+export function softDeleteMessage(message: Message): void {
+  const currentMessages = get(messagesByChannel)[message.channel_uuid] ?? [];
+  const withoutDeleted = currentMessages.filter((item) => item.uuid !== message.uuid);
+  messagesByChannel.update((current) => ({
+    ...current,
+    [message.channel_uuid]: withoutDeleted,
+  }));
+}
+
+function getRandomClientId(): string {
+  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+    return crypto.randomUUID();
+  }
+  return `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+}
+
+export function createClientMessageId(): string {
+  return getRandomClientId();
+}
+
+export function addPendingMessage(channelUuid: string, content: string, clientId: string): void {
+  if (wasClientIdDelivered(channelUuid, clientId)) {
+    return;
+  }
+
+  const currentMessages = get(messagesByChannel)[channelUuid] ?? [];
+  if (currentMessages.some((message) => message.client_id === clientId)) {
+    return;
+  }
+
+  const pendingMessage: Message = {
+    uuid: `pending-${clientId}`,
+    channel_uuid: channelUuid,
+    content,
+    author: 'Ty',
+    created_at: new Date().toISOString(),
+    client_id: clientId,
+    pending: true,
+    failed: false,
+  };
+
+  const merged = dedupeByUuid([...currentMessages, pendingMessage]);
+  const windowed = applyWindowLimit(merged, 'newer');
+
+  messagesByChannel.update((current) => ({
+    ...current,
+    [channelUuid]: windowed.windowed,
+  }));
+
+  resolveMessageStateAfterAppend(channelUuid, windowed.windowed);
+}
+
+export function markPendingMessageFailed(channelUuid: string, clientId: string): void {
+  const currentMessages = get(messagesByChannel)[channelUuid] ?? [];
+  const failedMessages = currentMessages.map((message) => {
+    if (message.pending && message.client_id === clientId) {
+      return {
+        ...message,
+        failed: true,
+      };
+    }
+    return message;
   });
+
+  messagesByChannel.update((current) => ({
+    ...current,
+    [channelUuid]: failedMessages,
+  }));
 }
 
 export function setMessagesForChannel(channelUuid: string, messages: Message[]): void {
@@ -640,4 +793,27 @@ export function clearMessagesForChannel(channelUuid: string): void {
     [channelUuid]: 0,
   }));
   setLastReadMessageUuid(channelUuid, null);
+}
+
+export function resetChatState(): void {
+  messagesByChannel.set({});
+  channelQueryStateById.set({});
+  unreadCountByChannel.set({});
+  lastReadMessageUuidByChannel.set({});
+
+  for (const key of Object.keys(inFlightInitialByChannel)) {
+    delete inFlightInitialByChannel[key];
+  }
+  for (const key of Object.keys(inFlightOlderByChannel)) {
+    delete inFlightOlderByChannel[key];
+  }
+  for (const key of Object.keys(inFlightNewerByChannel)) {
+    delete inFlightNewerByChannel[key];
+  }
+  for (const key of Object.keys(requestIdCounterByChannel)) {
+    delete requestIdCounterByChannel[key];
+  }
+  for (const key of Object.keys(deliveredClientIdsByChannel)) {
+    delete deliveredClientIdsByChannel[key];
+  }
 }

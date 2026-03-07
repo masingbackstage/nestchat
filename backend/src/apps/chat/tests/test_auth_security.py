@@ -38,6 +38,47 @@ def test_logout_all_blacklists_user_refresh_tokens():
 
 
 @pytest.mark.django_db
+def test_refresh_rotation_invalidates_previous_refresh_token():
+    user = CustomUser.objects.create_user(email="refresh-rotation@example.com", password="pw")
+    refresh = RefreshToken.for_user(user)
+
+    client = APIClient()
+    first = client.post("/api/auth/token/refresh/", {"refresh": str(refresh)}, format="json")
+    assert first.status_code == 200
+    refreshed_token = first.json().get("refresh")
+    assert refreshed_token
+
+    second = client.post("/api/auth/token/refresh/", {"refresh": str(refresh)}, format="json")
+    assert second.status_code in {400, 401}
+
+
+@pytest.mark.django_db
+def test_logout_session_blacklists_only_current_refresh_token():
+    user = CustomUser.objects.create_user(email="logout-session@example.com", password="pw")
+    first_refresh = RefreshToken.for_user(user)
+    second_refresh = RefreshToken.for_user(user)
+
+    client = APIClient()
+    client.force_authenticate(user=user)
+    response = client.post(
+        "/api/auth/logout-session/",
+        {"refresh": str(first_refresh)},
+        format="json",
+    )
+    assert response.status_code == 200
+    assert response.json()["detail"] == "Session logged out."
+
+    first_reuse = APIClient().post(
+        "/api/auth/token/refresh/", {"refresh": str(first_refresh)}, format="json"
+    )
+    second_reuse = APIClient().post(
+        "/api/auth/token/refresh/", {"refresh": str(second_refresh)}, format="json"
+    )
+    assert first_reuse.status_code in {400, 401}
+    assert second_reuse.status_code == 200
+
+
+@pytest.mark.django_db
 def test_messages_endpoint_is_throttled_by_scope(monkeypatch):
     owner = CustomUser.objects.create_user(email="owner-throttle@example.com", password="pw")
     user = CustomUser.objects.create_user(email="member-throttle@example.com", password="pw")

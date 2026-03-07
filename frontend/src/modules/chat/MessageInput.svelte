@@ -1,8 +1,10 @@
 <script lang="ts">
   import { activeChannel } from '../../lib/stores/ui';
   import { sendChatMessage } from '../../lib/socket';
+  import { addPendingMessage, createClientMessageId, wasClientIdDelivered } from './messages.store';
 
   const DRAFTS_STORAGE_KEY = 'chat_channel_drafts_v1';
+  const PENDING_MESSAGE_DELAY_MS = 250;
 
   let content = '';
   let localError = '';
@@ -44,11 +46,20 @@
       return;
     }
 
-    const sent = sendChatMessage($activeChannel.uuid, trimmed);
+    const channelUuid = $activeChannel.uuid;
+    const clientId = createClientMessageId();
+    const sent = sendChatMessage($activeChannel.uuid, trimmed, clientId);
     if (!sent) {
       localError = 'Brak połączenia z gateway.';
       return;
     }
+
+    setTimeout(() => {
+      if (wasClientIdDelivered(channelUuid, clientId)) {
+        return;
+      }
+      addPendingMessage(channelUuid, trimmed, clientId);
+    }, PENDING_MESSAGE_DELAY_MS);
 
     content = '';
     localError = '';

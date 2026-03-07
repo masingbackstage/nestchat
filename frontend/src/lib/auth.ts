@@ -2,9 +2,17 @@ const ACCESS_TOKEN_KEY = 'access_token';
 const REFRESH_TOKEN_KEY = 'refresh_token';
 const REFRESH_ENDPOINT = '/auth/token/refresh/';
 const LOGIN_ENDPOINT = '/auth/login/';
+const LOGOUT_SESSION_ENDPOINT = '/auth/logout-session/';
+const LOGOUT_ALL_ENDPOINT = '/auth/logout-all/';
 const EXPIRY_LEEWAY_SECONDS = 30;
 
 let refreshPromise: Promise<string | null> | null = null;
+let authFailureHandler: (() => void) | null = null;
+
+type AuthActionResult = {
+  ok: boolean;
+  error?: string;
+};
 
 function getBaseUrl(): string | null {
   return import.meta.env.VITE_API_URL ?? null;
@@ -16,6 +24,25 @@ function getEnvToken(): string | null {
 
 export function getStoredAccessToken(): string | null {
   return localStorage.getItem(ACCESS_TOKEN_KEY);
+}
+
+export function getCurrentUserUuid(): string | null {
+  const token = getStoredAccessToken();
+  if (!token) {
+    return null;
+  }
+
+  try {
+    const payloadBase64 = token.split('.')[1];
+    if (!payloadBase64) {
+      return null;
+    }
+    const payloadJson = atob(payloadBase64.replace(/-/g, '+').replace(/_/g, '/'));
+    const payload = JSON.parse(payloadJson) as { user_uuid?: string; userUuid?: string };
+    return payload.user_uuid ?? payload.userUuid ?? null;
+  } catch {
+    return null;
+  }
 }
 
 function getStoredRefreshToken(): string | null {
@@ -37,6 +64,14 @@ function clearStoredTokens(): void {
 
 export function clearAuthTokens(): void {
   clearStoredTokens();
+}
+
+export function setAuthFailureHandler(handler: (() => void) | null): void {
+  authFailureHandler = handler;
+}
+
+function notifyAuthFailure(): void {
+  authFailureHandler?.();
 }
 
 function parseJwtExp(token: string): number | null {
@@ -76,6 +111,7 @@ export async function refreshAccessToken(): Promise<string | null> {
   const baseUrl = getBaseUrl();
   const refreshToken = getStoredRefreshToken();
   if (!baseUrl || !refreshToken) {
+    notifyAuthFailure();
     return null;
   }
 
@@ -90,6 +126,7 @@ export async function refreshAccessToken(): Promise<string | null> {
 
     if (!response.ok) {
       clearStoredTokens();
+      notifyAuthFailure();
       return null;
     }
 
@@ -100,6 +137,7 @@ export async function refreshAccessToken(): Promise<string | null> {
 
     if (!payload.access) {
       clearStoredTokens();
+      notifyAuthFailure();
       return null;
     }
 
@@ -114,6 +152,96 @@ export async function refreshAccessToken(): Promise<string | null> {
   });
 
   return refreshPromise;
+}
+
+async function extractErrorDetail(response: Response): Promise<string> {
+  try {
+    const payload = (await response.json()) as {
+      detail?: string;
+      nonFieldErrors?: string[];
+      non_field_errors?: string[];
+    };
+    return (
+      payload.detail ??
+      payload.nonFieldErrors?.[0] ??
+      payload.non_field_errors?.[0] ??
+      `HTTP ${response.status}`
+    );
+  } catch {
+    return `HTTP ${response.status}`;
+  }
+}
+
+export async function logoutCurrentSession(): Promise<AuthActionResult> {
+  const baseUrl = getBaseUrl();
+  const refreshToken = getStoredRefreshToken();
+  const accessToken = getStoredAccessToken();
+
+  if (!baseUrl) {
+    return { ok: false, error: 'Brak VITE_API_URL.' };
+  }
+  if (!refreshToken) {
+    return { ok: false, error: 'Brak tokenu odświeżania.' };
+  }
+  if (!accessToken) {
+    return { ok: false, error: 'Brak tokenu dostępu.' };
+  }
+
+  try {
+    const headers = new Headers({
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${accessToken}`,
+    });
+
+    const response = await fetch(`${baseUrl}${LOGOUT_SESSION_ENDPOINT}`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({ refresh: refreshToken }),
+    });
+
+    if (!response.ok) {
+      return {
+        ok: false,
+        error: await extractErrorDetail(response),
+      };
+    }
+
+    return { ok: true };
+  } catch {
+    return { ok: false, error: 'Błąd sieci podczas wylogowania.' };
+  }
+}
+
+export async function logoutAllSessions(): Promise<AuthActionResult> {
+  const baseUrl = getBaseUrl();
+  const accessToken = getStoredAccessToken();
+
+  if (!baseUrl) {
+    return { ok: false, error: 'Brak VITE_API_URL.' };
+  }
+  if (!accessToken) {
+    return { ok: false, error: 'Brak tokenu dostępu.' };
+  }
+
+  try {
+    const response = await fetch(`${baseUrl}${LOGOUT_ALL_ENDPOINT}`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+      },
+    });
+
+    if (!response.ok) {
+      return {
+        ok: false,
+        error: await extractErrorDetail(response),
+      };
+    }
+
+    return { ok: true };
+  } catch {
+    return { ok: false, error: 'Błąd sieci podczas wylogowania ze wszystkich sesji.' };
+  }
 }
 
 export async function loginWithPassword(

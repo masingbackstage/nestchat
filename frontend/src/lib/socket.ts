@@ -4,6 +4,7 @@ import type { GatewayMessageEvent } from '../types/gateway';
 type MessageListener = (event: GatewayMessageEvent) => void;
 type ReconnectListener = () => void;
 type TokenProvider = () => string | null | Promise<string | null>;
+type AuthFailureHandler = () => void;
 
 let socket: WebSocket | null = null;
 const listeners = new Set<MessageListener>();
@@ -14,6 +15,8 @@ let manuallyDisconnected = false;
 let currentToken: string | null = null;
 let hasEverConnected = false;
 let tokenProvider: TokenProvider | null = null;
+let authFailureHandler: AuthFailureHandler | null = null;
+const pendingChannelJoins = new Set<string>();
 
 const RECONNECT_BASE_DELAY_MS = 1_000;
 const RECONNECT_MAX_DELAY_MS = 10_000;
@@ -21,6 +24,28 @@ const RECONNECT_MAX_DELAY_MS = 10_000;
 function createWsUrl(base: string, token: string): string {
   const normalized = base.endsWith('/') ? base.slice(0, -1) : base;
   return `${normalized}/ws/?token=${encodeURIComponent(token)}`;
+}
+
+function sendJoinChannelRequest(channelUuid: string): void {
+  if (!socket || socket.readyState !== WebSocket.OPEN) {
+    return;
+  }
+
+  socket.send(
+    JSON.stringify({
+      module: 'CHAT',
+      action: 'JOIN_CHANNEL',
+      payload: {
+        channel_uuid: channelUuid,
+      },
+    }),
+  );
+}
+
+function flushPendingChannelJoins(): void {
+  for (const channelUuid of pendingChannelJoins) {
+    sendJoinChannelRequest(channelUuid);
+  }
 }
 
 export function connectGateway(token: string): void {
@@ -55,6 +80,7 @@ export function connectGateway(token: string): void {
     hasEverConnected = true;
     reconnectAttempt = 0;
     chatConnectionStatus.set('connected');
+    flushPendingChannelJoins();
     if (shouldNotifyReconnect) {
       reconnectListeners.forEach((listener) => listener());
     }
@@ -85,6 +111,7 @@ export function connectGateway(token: string): void {
 export function disconnectGateway(): void {
   manuallyDisconnected = true;
   currentToken = null;
+  pendingChannelJoins.clear();
   reconnectAttempt = 0;
   hasEverConnected = false;
   if (reconnectTimer) {
@@ -105,6 +132,10 @@ export function setGatewayTokenProvider(provider: TokenProvider): void {
   tokenProvider = provider;
 }
 
+export function setGatewayAuthFailureHandler(handler: AuthFailureHandler | null): void {
+  authFailureHandler = handler;
+}
+
 export function subscribeGateway(listener: MessageListener): () => void {
   listeners.add(listener);
 
@@ -121,7 +152,7 @@ export function subscribeGatewayReconnect(listener: ReconnectListener): () => vo
   };
 }
 
-export function sendChatMessage(channelUuid: string, content: string): boolean {
+export function sendChatMessage(channelUuid: string, content: string, clientId?: string): boolean {
   if (!socket || socket.readyState !== WebSocket.OPEN) {
     return false;
   }
@@ -133,11 +164,58 @@ export function sendChatMessage(channelUuid: string, content: string): boolean {
       payload: {
         channel_uuid: channelUuid,
         content,
+        ...(clientId ? { client_id: clientId } : {}),
       },
     }),
   );
 
   return true;
+}
+
+export function sendEditMessage(messageUuid: string, content: string): boolean {
+  if (!socket || socket.readyState !== WebSocket.OPEN) {
+    return false;
+  }
+
+  socket.send(
+    JSON.stringify({
+      module: 'CHAT',
+      action: 'EDIT_MESSAGE',
+      payload: {
+        message_uuid: messageUuid,
+        content,
+      },
+    }),
+  );
+
+  return true;
+}
+
+export function sendDeleteMessage(messageUuid: string): boolean {
+  if (!socket || socket.readyState !== WebSocket.OPEN) {
+    return false;
+  }
+
+  socket.send(
+    JSON.stringify({
+      module: 'CHAT',
+      action: 'DELETE_MESSAGE',
+      payload: {
+        message_uuid: messageUuid,
+      },
+    }),
+  );
+
+  return true;
+}
+
+export function joinGatewayChannel(channelUuid: string): boolean {
+  pendingChannelJoins.add(channelUuid);
+  const isOpen = Boolean(socket && socket.readyState === WebSocket.OPEN);
+  if (isOpen) {
+    sendJoinChannelRequest(channelUuid);
+  }
+  return isOpen;
 }
 
 function scheduleReconnect(): void {
@@ -173,6 +251,8 @@ async function refreshTokenAndReconnect(): Promise<void> {
   const refreshedToken = await tokenProvider();
   if (!refreshedToken) {
     chatConnectionStatus.set('error');
+    manuallyDisconnected = true;
+    authFailureHandler?.();
     return;
   }
 

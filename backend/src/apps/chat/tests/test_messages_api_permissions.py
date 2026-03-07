@@ -200,3 +200,104 @@ def test_messages_list_cursor_tie_break_with_same_created_at():
         item["uuid"] for item in second_payload["items"]
     }
     assert len(seen_ids) == 3
+
+
+@pytest.mark.django_db
+def test_message_patch_allows_author_and_owner():
+    owner = CustomUser.objects.create_user(email="owner-api7@example.com", password="pw")
+    author = CustomUser.objects.create_user(email="author-api7@example.com", password="pw")
+    server = Server.objects.create(name="API Server 7", owner=owner)
+    ServerMember.objects.create(user=author, server=server)
+    channel = Channel.objects.create(server=server, name="general", is_public=True)
+    message = Message.objects.create(channel=channel, author=author, content="original")
+
+    author_client = APIClient()
+    author_client.force_authenticate(user=author)
+    author_response = author_client.patch(
+        f"/api/chat/messages/{message.uuid}/",
+        {"content": "edited by author"},
+        format="json",
+    )
+    assert author_response.status_code == 200
+    assert author_response.json()["content"] == "edited by author"
+
+    owner_client = APIClient()
+    owner_client.force_authenticate(user=owner)
+    owner_response = owner_client.patch(
+        f"/api/chat/messages/{message.uuid}/",
+        {"content": "edited by owner"},
+        format="json",
+    )
+    assert owner_response.status_code == 200
+    assert owner_response.json()["content"] == "edited by owner"
+
+
+@pytest.mark.django_db
+def test_message_patch_denies_other_member():
+    owner = CustomUser.objects.create_user(email="owner-api8@example.com", password="pw")
+    author = CustomUser.objects.create_user(email="author-api8@example.com", password="pw")
+    intruder = CustomUser.objects.create_user(email="intruder-api8@example.com", password="pw")
+    server = Server.objects.create(name="API Server 8", owner=owner)
+    ServerMember.objects.create(user=author, server=server)
+    ServerMember.objects.create(user=intruder, server=server)
+    channel = Channel.objects.create(server=server, name="general", is_public=True)
+    message = Message.objects.create(channel=channel, author=author, content="original")
+
+    intruder_client = APIClient()
+    intruder_client.force_authenticate(user=intruder)
+    response = intruder_client.patch(
+        f"/api/chat/messages/{message.uuid}/",
+        {"content": "forbidden"},
+        format="json",
+    )
+    assert response.status_code == 403
+
+
+@pytest.mark.django_db
+def test_message_delete_soft_deletes_message():
+    owner = CustomUser.objects.create_user(email="owner-api9@example.com", password="pw")
+    author = CustomUser.objects.create_user(email="author-api9@example.com", password="pw")
+    server = Server.objects.create(name="API Server 9", owner=owner)
+    ServerMember.objects.create(user=author, server=server)
+    channel = Channel.objects.create(server=server, name="general", is_public=True)
+    message = Message.objects.create(channel=channel, author=author, content="to delete")
+
+    client = APIClient()
+    client.force_authenticate(user=author)
+    response = client.delete(f"/api/chat/messages/{message.uuid}/")
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert pick(payload, "isDeleted", "is_deleted") is True
+    assert payload["content"] == ""
+
+    message.refresh_from_db()
+    assert message.is_deleted is True
+    assert message.content == ""
+
+    list_response = client.get("/api/chat/messages/", {"channel_uuid": str(channel.uuid)})
+    assert list_response.status_code == 200
+    assert pick(list_response.json()["items"][0], "isDeleted", "is_deleted") is True
+
+
+@pytest.mark.django_db
+def test_message_patch_deleted_message_returns_400():
+    owner = CustomUser.objects.create_user(email="owner-api10@example.com", password="pw")
+    author = CustomUser.objects.create_user(email="author-api10@example.com", password="pw")
+    server = Server.objects.create(name="API Server 10", owner=owner)
+    ServerMember.objects.create(user=author, server=server)
+    channel = Channel.objects.create(server=server, name="general", is_public=True)
+    message = Message.objects.create(channel=channel, author=author, content="to delete")
+    message.is_deleted = True
+    message.content = ""
+    message.save(update_fields=["is_deleted", "content", "updated_at"])
+
+    client = APIClient()
+    client.force_authenticate(user=author)
+    response = client.patch(
+        f"/api/chat/messages/{message.uuid}/",
+        {"content": "cannot edit"},
+        format="json",
+    )
+
+    assert response.status_code == 400

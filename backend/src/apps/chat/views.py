@@ -5,7 +5,7 @@ from django.utils import timezone
 from django.utils.dateparse import parse_datetime
 from drf_spectacular.types import OpenApiTypes
 from drf_spectacular.utils import OpenApiParameter, OpenApiResponse, extend_schema
-from rest_framework import exceptions, permissions, status, viewsets
+from rest_framework import exceptions, mixins, permissions, status, viewsets
 from rest_framework.views import APIView
 from rest_framework.response import Response
 
@@ -14,14 +14,33 @@ from .serializers import (
     ChannelMarkReadSerializer,
     ChannelReadStateSerializer,
     MessageReadSerializer,
+    UpdateMessageSerializer,
 )
-from .services import ChannelNotFound, ChannelPermissionDenied, get_channel_for_user_or_raise
+from .services import (
+    ChannelNotFound,
+    ChannelPermissionDenied,
+    MessageNotFound,
+    MessagePermissionDenied,
+    get_channel_for_user_or_raise,
+    get_message_for_user_or_raise,
+)
 
 
-class MessageViewSet(viewsets.ReadOnlyModelViewSet):
+class MessageViewSet(
+    mixins.ListModelMixin,
+    mixins.UpdateModelMixin,
+    mixins.DestroyModelMixin,
+    viewsets.GenericViewSet,
+):
     serializer_class = MessageReadSerializer
     permission_classes = [permissions.IsAuthenticated]
-    throttle_scope = "chat_reads"
+    queryset = Message.objects.none()
+
+    def get_throttles(self):
+        self.throttle_scope = (
+            "chat_writes" if self.request.method in {"PATCH", "PUT", "DELETE"} else "chat_reads"
+        )
+        return super().get_throttles()
 
     @extend_schema(
         parameters=[
@@ -195,6 +214,41 @@ class MessageViewSet(viewsets.ReadOnlyModelViewSet):
 
     def build_cursor(self, message):
         return f"{message.created_at.isoformat()}|{message.uuid}"
+
+    @extend_schema(request=UpdateMessageSerializer, responses={200: MessageReadSerializer})
+    def partial_update(self, request, *args, **kwargs):
+        message = self.get_object()
+        if message.is_deleted:
+            raise exceptions.ValidationError({"detail": "Cannot edit deleted message."})
+
+        serializer = UpdateMessageSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        message.content = serializer.validated_data["content"]
+        message.edited_at = timezone.now()
+        message.save(update_fields=["content", "edited_at", "updated_at"])
+        return Response(MessageReadSerializer(message).data, status=status.HTTP_200_OK)
+
+    @extend_schema(request=None, responses={200: MessageReadSerializer})
+    def destroy(self, request, *args, **kwargs):
+        message = self.get_object()
+        if not message.is_deleted:
+            message.is_deleted = True
+            message.deleted_at = timezone.now()
+            message.deleted_by = request.user
+            message.content = ""
+            message.save(update_fields=["is_deleted", "deleted_at", "deleted_by", "content", "updated_at"])
+
+        return Response(MessageReadSerializer(message).data, status=status.HTTP_200_OK)
+
+    def get_object(self):
+        message_uuid = self.kwargs.get(self.lookup_field)
+        try:
+            return get_message_for_user_or_raise(self.request.user, message_uuid)
+        except MessageNotFound as exc:
+            raise exceptions.NotFound(exc.detail)
+        except MessagePermissionDenied as exc:
+            raise exceptions.PermissionDenied(exc.detail)
 
 
 class ChannelReadStateAPIView(APIView):
