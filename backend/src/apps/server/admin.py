@@ -1,18 +1,19 @@
 from django.contrib import admin
 
 # Pamiętaj o zaimportowaniu nowych modeli!
-from .models import Channel, Server, Role, ServerMember
+from .models import Channel, Role, Server, ServerMember
+
 
 class ChannelInline(admin.TabularInline):
     model = Channel
     extra = 1
-    fields = ('name', 'channel_type', 'is_public', 'topic')
+    fields = ("name", "channel_type", "is_public", "topic")
 
 
 class ServerMemberInline(admin.TabularInline):
     model = ServerMember
     extra = 1
-    fields = ('user',)
+    fields = ("user",)
 
 
 class RoleInline(admin.TabularInline):

@@ -1,11 +1,13 @@
 import uuid
+
 from django.db import models
+
 from src.apps.server.enums import ChannelType
 
 
 class Channel(models.Model):
     uuid = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
-    server = models.ForeignKey('server.Server', on_delete=models.CASCADE, related_name="channels")
+    server = models.ForeignKey("server.Server", on_delete=models.CASCADE, related_name="channels")
     name = models.CharField(max_length=100)
     topic = models.CharField(max_length=255, blank=True, null=True)
     channel_type = models.CharField(
@@ -13,7 +15,9 @@ class Channel(models.Model):
     )
 
     is_public = models.BooleanField(default=True)
-    allowed_roles = models.ManyToManyField('server.Role', blank=True, related_name="allowed_channels")
+    allowed_roles = models.ManyToManyField(
+        "server.Role", blank=True, related_name="allowed_channels"
+    )
 
     created_at = models.DateTimeField(auto_now_add=True)
 

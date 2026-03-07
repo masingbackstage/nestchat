@@ -28,9 +28,8 @@ def get_channel_for_user_or_raise(user, channel_uuid):
         raise ChannelNotFound(detail="Channel not found.", code="not_found") from exc
 
     try:
-        server_member = (
-            ServerMember.objects.prefetch_related("roles")
-            .get(server=channel.server, user=user)
+        server_member = ServerMember.objects.prefetch_related("roles").get(
+            server=channel.server, user=user
         )
     except ServerMember.DoesNotExist as exc:
         raise ChannelPermissionDenied(

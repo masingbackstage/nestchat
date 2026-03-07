@@ -1,6 +1,8 @@
 import uuid
+
 from django.conf import settings
 from django.db import models
+
 
 class Server(models.Model):
     uuid = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
@@ -13,9 +15,9 @@ class Server(models.Model):
 
     members = models.ManyToManyField(
         settings.AUTH_USER_MODEL,
-        through='server.ServerMember',
+        through="server.ServerMember",
         related_name="joined_servers",
-        blank=True
+        blank=True,
     )
 
     created_at = models.DateTimeField(auto_now_add=True)
