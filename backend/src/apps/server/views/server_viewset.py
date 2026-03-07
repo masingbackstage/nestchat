@@ -10,6 +10,7 @@ from src.apps.server.models import Channel, Role, Server
 from src.apps.server.serializers import (
     ChannelCreateSerializer,
     ChannelDetailSerializer,
+    ServerMembersResponseSerializer,
     ServerListSerializer,
 )
 
@@ -26,6 +27,11 @@ class ServerViewSet(viewsets.ReadOnlyModelViewSet):
             .distinct()
             .prefetch_related("channels")
         )
+
+    def has_server_access(self, user, server: Server) -> bool:
+        if server.owner_id == user.pk:
+            return True
+        return server.server_members.filter(user=user).exists()
 
     @action(detail=True, methods=["post"], url_path="channels")
     def channels(self, request, uuid=None):
@@ -52,3 +58,114 @@ class ServerViewSet(viewsets.ReadOnlyModelViewSet):
 
         response_serializer = ChannelDetailSerializer(channel)
         return Response(response_serializer.data, status=status.HTTP_201_CREATED)
+
+    @action(detail=True, methods=["get"], url_path="members")
+    def members(self, request, uuid=None):
+        server = get_object_or_404(
+            Server.objects.select_related("owner", "owner__profile"),
+            uuid=uuid,
+        )
+        if not self.has_server_access(request.user, server):
+            raise PermissionDenied("You do not have access to this server.")
+
+        server_members = list(
+            server.server_members.select_related("user", "user__profile").prefetch_related("roles")
+        )
+
+        members_by_user_id: dict[int, dict] = {}
+
+        def get_profile(user):
+            try:
+                return user.profile
+            except Exception:
+                return None
+
+        def to_display_name(user):
+            profile = get_profile(user)
+            if profile and profile.display_name:
+                return profile.display_name
+            return user.email.split("@")[0]
+
+        def to_avatar(user):
+            profile = get_profile(user)
+            if profile and profile.avatar:
+                return profile.avatar.url
+            return None
+
+        def to_custom_status(user):
+            profile = get_profile(user)
+            if profile and profile.custom_status:
+                return profile.custom_status
+            return None
+
+        def to_is_online(user):
+            profile = get_profile(user)
+            if profile:
+                return bool(profile.is_online)
+            return False
+
+        for server_member in server_members:
+            user = server_member.user
+            roles = sorted(
+                server_member.roles.all(),
+                key=lambda role: (role.name.lower(), str(role.uuid)),
+            )
+            members_by_user_id[user.pk] = {
+                "uuid": user.uuid,
+                "display_name": to_display_name(user),
+                "is_online": to_is_online(user),
+                "roles": [{"uuid": role.uuid, "name": role.name} for role in roles],
+                "avatar": to_avatar(user),
+                "custom_status": to_custom_status(user),
+            }
+
+        owner = server.owner
+        if owner.pk not in members_by_user_id:
+            members_by_user_id[owner.pk] = {
+                "uuid": owner.uuid,
+                "display_name": to_display_name(owner),
+                "is_online": to_is_online(owner),
+                "roles": [],
+                "avatar": to_avatar(owner),
+                "custom_status": to_custom_status(owner),
+            }
+
+        grouped = {
+            "online_with_roles": {
+                "key": "online_with_roles",
+                "label": "Online — roles",
+                "members": [],
+            },
+            "online": {
+                "key": "online",
+                "label": "Online",
+                "members": [],
+            },
+            "offline": {
+                "key": "offline",
+                "label": "Offline",
+                "members": [],
+            },
+        }
+
+        for member in members_by_user_id.values():
+            if member["is_online"] and member["roles"]:
+                grouped["online_with_roles"]["members"].append(member)
+            elif member["is_online"]:
+                grouped["online"]["members"].append(member)
+            else:
+                grouped["offline"]["members"].append(member)
+
+        groups = []
+        for group_key in ("online_with_roles", "online", "offline"):
+            group = grouped[group_key]
+            if not group["members"]:
+                continue
+            group["members"] = sorted(
+                group["members"],
+                key=lambda member: (member["display_name"].lower(), str(member["uuid"])),
+            )
+            groups.append(group)
+
+        response_serializer = ServerMembersResponseSerializer({"groups": groups})
+        return Response(response_serializer.data)

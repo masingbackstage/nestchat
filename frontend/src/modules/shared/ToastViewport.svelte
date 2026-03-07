@@ -3,13 +3,13 @@
   import { removeToast, toasts } from '../../lib/stores/toast';
 </script>
 
-<div class="pointer-events-none fixed right-4 top-4 z-50 flex w-full max-w-sm flex-col gap-2">
+<div class="pointer-events-none fixed right-4 top-4 z-[90] flex w-full max-w-sm flex-col gap-2">
   {#each $toasts as toast (toast.id)}
     <div
-      class={`pointer-events-auto rounded-lg border px-3 py-2 shadow-xl ${
+      class={`glass-panel-strong pointer-events-auto rounded-xl px-3 py-2 ${
         toast.type === 'success'
-          ? 'border-emerald-500/40 bg-emerald-500/15 text-emerald-100'
-          : 'border-red-500/40 bg-red-500/15 text-red-100'
+          ? 'border-emerald-500/45 bg-emerald-500/15 text-emerald-100'
+          : 'border-red-500/45 bg-red-500/15 text-red-100'
       }`}
       in:fly={{ x: 20, y: -8, duration: 180 }}
       out:fade={{ duration: 140 }}
@@ -20,7 +20,7 @@
         <p class="text-sm">{toast.message}</p>
         <button
           type="button"
-          class="rounded border border-slate-600 px-1.5 py-0.5 text-[10px] text-slate-200 transition hover:border-slate-400"
+          class="rounded border border-white/20 px-1.5 py-0.5 text-[10px] text-muted-100 transition hover:border-glass-highlight"
           on:click={() => removeToast(toast.id)}
           aria-label="Zamknij powiadomienie"
         >

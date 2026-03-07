@@ -32,15 +32,27 @@ import { pushToast } from './lib/stores/toast';
     syncChannelFromLatestCursor,
     updateMessage,
   } from './modules/chat/messages.store';
-  import type { GatewayMessageEvent, Message, Server } from './types/gateway';
+  import {
+    ensureServerMembers,
+    resetMembersState,
+    updateServerMemberPresence,
+  } from './modules/servers/members.store';
+  import type {
+    GatewayMessageEvent,
+    Message,
+    PresenceMembersChangedPayload,
+    PresenceStatusChangedPayload,
+    Server,
+  } from './types/gateway';
   import LoginForm from './modules/auth/LoginForm.svelte';
   import RegisterForm from './modules/auth/RegisterForm.svelte';
   import SettingsModal from './modules/auth/SettingsModal.svelte';
-import LandingPage from './modules/landing/LandingPage.svelte';
-import ServerList from './modules/servers/ServerList.svelte';
-import ChannelList from './modules/channels/ChannelList.svelte';
-import ChatWindow from './modules/chat/ChatWindow.svelte';
-import ToastViewport from './modules/shared/ToastViewport.svelte';
+  import LandingPage from './modules/landing/LandingPage.svelte';
+  import ServerList from './modules/servers/ServerList.svelte';
+  import ChannelList from './modules/channels/ChannelList.svelte';
+  import ChatWindow from './modules/chat/ChatWindow.svelte';
+  import MemberSidebar from './modules/servers/MemberSidebar.svelte';
+  import ToastViewport from './modules/shared/ToastViewport.svelte';
 
   let unsubscribeGateway: (() => void) | null = null;
   let unsubscribeGatewayReconnect: (() => void) | null = null;
@@ -104,6 +116,7 @@ import ToastViewport from './modules/shared/ToastViewport.svelte';
     activeChannel.set(null);
     clearReadStateCache();
     resetChatState();
+    resetMembersState();
     tearDownGatewaySubscriptions();
     isSettingsOpen = false;
     isSettingsSubmitting = false;
@@ -119,9 +132,37 @@ import ToastViewport from './modules/shared/ToastViewport.svelte';
       if (payload.code === 'permission_denied' || payload.code === 'not_found') {
         pushToast({
           type: 'error',
-          message: payload.detail ?? 'Błąd uprawnień kanału.',
+          message: payload.detail ?? 'Channel permission error.',
         });
       }
+      return;
+    }
+
+    if (moduleName === 'presence' && actionName === 'status_changed') {
+      const payload = event.payload as PresenceStatusChangedPayload;
+      const serverUuid = payload.serverUuid ?? payload.server_uuid;
+      const memberUuid = payload.memberUuid ?? payload.member_uuid;
+      if (!serverUuid || !memberUuid) {
+        return;
+      }
+      const knownMember = updateServerMemberPresence(
+        serverUuid,
+        memberUuid,
+        Boolean(payload.isOnline ?? payload.is_online ?? false),
+      );
+      if (!knownMember) {
+        void ensureServerMembers(serverUuid, true);
+      }
+      return;
+    }
+
+    if (moduleName === 'presence' && actionName === 'members_changed') {
+      const payload = event.payload as PresenceMembersChangedPayload;
+      const serverUuid = payload.serverUuid ?? payload.server_uuid;
+      if (!serverUuid) {
+        return;
+      }
+      void ensureServerMembers(serverUuid, true);
       return;
     }
 
@@ -243,7 +284,7 @@ import ToastViewport from './modules/shared/ToastViewport.svelte';
     const baseUrl = import.meta.env.VITE_API_URL;
 
     if (!baseUrl) {
-      console.error('Brak VITE_API_URL w env.');
+      console.error('Missing VITE_API_URL in env.');
       servers.set([]);
       activeServer.set(null);
       activeChannel.set(null);
@@ -280,7 +321,7 @@ import ToastViewport from './modules/shared/ToastViewport.svelte';
       }
 
     } catch (error) {
-      console.error('Błąd ładowania serwerów:', error);
+      console.error('Failed to load servers:', error);
       servers.set([]);
       activeServer.set(null);
       activeChannel.set(null);
@@ -319,6 +360,10 @@ import ToastViewport from './modules/shared/ToastViewport.svelte';
   $: if ($activeChannel?.uuid) {
     ensureChannelMessages($activeChannel.uuid);
     joinGatewayChannel($activeChannel.uuid);
+  }
+
+  $: if ($activeServer?.uuid) {
+    ensureServerMembers($activeServer.uuid);
   }
 
   $: if ($activeServer?.channels?.length) {
@@ -367,14 +412,14 @@ import ToastViewport from './modules/shared/ToastViewport.svelte';
     if (!result.ok) {
       pushToast({
         type: 'error',
-        message: result.error ?? 'Nie udało się wylogować z tego urządzenia.',
+        message: result.error ?? 'Failed to log out from this device.',
       });
       return;
     }
     clearAuthTokens();
     pushToast({
       type: 'success',
-      message: 'Wylogowano z tego urządzenia.',
+      message: 'Logged out from this device.',
     });
     applyUnauthenticatedState();
   }
@@ -386,22 +431,22 @@ import ToastViewport from './modules/shared/ToastViewport.svelte';
     if (!result.ok) {
       pushToast({
         type: 'error',
-        message: result.error ?? 'Nie udało się wylogować ze wszystkich urządzeń.',
+        message: result.error ?? 'Failed to log out from all devices.',
       });
       return;
     }
     clearAuthTokens();
     pushToast({
       type: 'success',
-      message: 'Wylogowano ze wszystkich urządzeń.',
+      message: 'Logged out from all devices.',
     });
     applyUnauthenticatedState();
   }
 </script>
 
 {#if isBootstrapping}
-  <div class="flex h-screen w-full items-center justify-center bg-app-950 text-sm text-slate-400">
-    Ładowanie...
+  <div class="flex h-screen w-full items-center justify-center bg-surface-950 text-sm text-muted-300">
+    Loading...
   </div>
 {:else}
   {#if routePath === '/'}
@@ -430,14 +475,21 @@ import ToastViewport from './modules/shared/ToastViewport.svelte';
       />
     {/if}
   {:else}
-    <div class="flex h-screen w-full overflow-hidden bg-app-950 text-slate-100">
-      <ServerList
-        on:openSettings={() => {
-          isSettingsOpen = true;
-        }}
-      />
-      <ChannelList />
-      <ChatWindow />
+    <div class="app-shell">
+      <div class="ambient-blob left-[-10%] top-[-20%] h-[420px] w-[420px] bg-accent-500/25"></div>
+      <div class="ambient-blob right-[-10%] top-[5%] h-[460px] w-[460px] bg-indigo-500/20"></div>
+      <div class="ambient-blob bottom-[-20%] left-[35%] h-[380px] w-[380px] bg-cyan-500/15"></div>
+
+      <div class="relative flex h-full w-full gap-2.5 text-slate-100 lg:gap-3">
+        <ServerList
+          on:openSettings={() => {
+            isSettingsOpen = true;
+          }}
+        />
+        <ChannelList />
+        <ChatWindow />
+        <MemberSidebar />
+      </div>
     </div>
     {#if isSettingsOpen}
       <SettingsModal

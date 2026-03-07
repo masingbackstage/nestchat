@@ -66,11 +66,11 @@
 
       activeChannel.set(channel);
       isCreateModalOpen = false;
-      pushToast({ type: 'success', message: `Utworzono kanał #${channel.name}.` });
+      pushToast({ type: 'success', message: `Channel #${channel.name} created.` });
     } catch (error) {
       pushToast({
         type: 'error',
-        message: error instanceof Error ? error.message : 'Nie udało się utworzyć kanału.',
+        message: error instanceof Error ? error.message : 'Failed to create channel.',
       });
     } finally {
       isCreatingChannel = false;
@@ -79,58 +79,84 @@
 </script>
 
 <nav
-  class="flex w-[260px] shrink-0 flex-col border-r border-slate-800 bg-app-900"
+  class="glass-panel w-[280px] shrink-0 rounded-panel"
   aria-label="Channels"
 >
   {#if $activeServer}
-    <header
-      class="flex h-12 items-center justify-between border-b border-slate-800 px-3.5 text-sm font-bold text-white"
-    >
-      <span class="truncate">{$activeServer.name}</span>
+    <header class="flex h-16 items-center justify-between border-b border-white/10 px-4">
+      <span class="truncate text-lg font-semibold text-slate-100">{$activeServer.name}</span>
       {#if canCreateChannels()}
         <button
           type="button"
-          class="ml-2 rounded border border-slate-700 px-2 py-0.5 text-xs text-slate-300 transition hover:border-slate-500 hover:text-slate-100"
+          class="ml-2 rounded-xl border border-white/15 bg-white/5 px-2.5 py-1 text-xs font-medium text-muted-200 transition hover:border-glass-highlight hover:bg-white/10 hover:text-slate-100"
           on:click={() => {
             isCreateModalOpen = true;
           }}
-          aria-label="Utwórz kanał"
-          title="Utwórz kanał"
+          aria-label="Create channel"
+          title="Create channel"
         >
           +
         </button>
       {/if}
     </header>
 
-    <div class="flex min-h-0 flex-1 flex-col gap-1 overflow-auto p-2">
-      {#each $activeServer.channels as channel}
-        <button
-          type="button"
-          class={`flex w-full items-center gap-2 rounded px-2 py-1.5 text-left text-sm transition-colors ${
-            $activeChannel?.uuid === channel.uuid
-              ? 'bg-slate-700 text-white'
-              : 'text-slate-400 hover:bg-slate-800 hover:text-slate-200'
-          }`}
-          on:click={() => selectChannel(channel)}
-        >
-          {#if isVoiceChannel(channel)}
-            <Volume2 aria-hidden="true" class="h-4 w-4 shrink-0 text-slate-500" />
-          {:else}
-            <span aria-hidden="true" class="text-slate-500">#</span>
-          {/if}
-          <span class="truncate">{channel.name}</span>
-          {#if ($unreadCountByChannel[channel.uuid] ?? 0) > 0}
-            <span
-              class="ml-auto rounded-full bg-emerald-500/20 px-2 py-0.5 text-[11px] font-semibold text-emerald-200"
-            >
-              {$unreadCountByChannel[channel.uuid]}
-            </span>
-          {/if}
-        </button>
-      {/each}
+    <div class="app-scrollbar flex min-h-0 flex-1 flex-col gap-5 overflow-auto px-3 py-3">
+      <section>
+        <h3 class="mb-1.5 px-2 text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-500">
+          Text channels
+        </h3>
+        {#each $activeServer.channels.filter((c) => !isVoiceChannel(c)) as channel}
+          <button
+            type="button"
+            class={`mb-0.5 flex w-full items-center gap-2 rounded-xl px-2.5 py-2 text-left text-sm transition ${
+              $activeChannel?.uuid === channel.uuid
+                ? 'bg-white/10 text-slate-100'
+                : 'text-muted-300 hover:bg-white/5 hover:text-slate-100'
+            }`}
+            on:click={() => selectChannel(channel)}
+          >
+            <span aria-hidden="true" class="text-muted-500">#</span>
+            <span class="truncate font-medium">{channel.name}</span>
+            {#if ($unreadCountByChannel[channel.uuid] ?? 0) > 0}
+              <span
+                class="ml-auto rounded-pill bg-emerald-500/20 px-2 py-0.5 text-[11px] font-semibold text-emerald-200"
+              >
+                {$unreadCountByChannel[channel.uuid]}
+              </span>
+            {/if}
+          </button>
+        {/each}
+      </section>
+
+      <section>
+        <h3 class="mb-1.5 px-2 text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-500">
+          Voice channels
+        </h3>
+        {#each $activeServer.channels.filter((c) => isVoiceChannel(c)) as channel}
+          <button
+            type="button"
+            class={`mb-0.5 flex w-full items-center gap-2 rounded-xl px-2.5 py-2 text-left text-sm transition ${
+              $activeChannel?.uuid === channel.uuid
+                ? 'bg-white/10 text-slate-100'
+                : 'text-muted-300 hover:bg-white/5 hover:text-slate-100'
+            }`}
+            on:click={() => selectChannel(channel)}
+          >
+            <Volume2 aria-hidden="true" class="h-4 w-4 shrink-0 text-muted-500" />
+            <span class="truncate font-medium">{channel.name}</span>
+            {#if ($unreadCountByChannel[channel.uuid] ?? 0) > 0}
+              <span
+                class="ml-auto rounded-pill bg-emerald-500/20 px-2 py-0.5 text-[11px] font-semibold text-emerald-200"
+              >
+                {$unreadCountByChannel[channel.uuid]}
+              </span>
+            {/if}
+          </button>
+        {/each}
+      </section>
     </div>
   {:else}
-    <div class="p-4 text-sm text-slate-400">Brak wybranego serwera</div>
+    <div class="p-4 text-sm text-muted-300">No server selected</div>
   {/if}
 </nav>
 

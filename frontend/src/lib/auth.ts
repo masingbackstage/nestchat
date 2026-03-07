@@ -178,13 +178,13 @@ export async function logoutCurrentSession(): Promise<AuthActionResult> {
   const accessToken = getStoredAccessToken();
 
   if (!baseUrl) {
-    return { ok: false, error: 'Brak VITE_API_URL.' };
+    return { ok: false, error: 'Missing VITE_API_URL.' };
   }
   if (!refreshToken) {
-    return { ok: false, error: 'Brak tokenu odświeżania.' };
+    return { ok: false, error: 'Missing refresh token.' };
   }
   if (!accessToken) {
-    return { ok: false, error: 'Brak tokenu dostępu.' };
+    return { ok: false, error: 'Missing access token.' };
   }
 
   try {
@@ -208,7 +208,7 @@ export async function logoutCurrentSession(): Promise<AuthActionResult> {
 
     return { ok: true };
   } catch {
-    return { ok: false, error: 'Błąd sieci podczas wylogowania.' };
+    return { ok: false, error: 'Network error during logout.' };
   }
 }
 
@@ -217,10 +217,10 @@ export async function logoutAllSessions(): Promise<AuthActionResult> {
   const accessToken = getStoredAccessToken();
 
   if (!baseUrl) {
-    return { ok: false, error: 'Brak VITE_API_URL.' };
+    return { ok: false, error: 'Missing VITE_API_URL.' };
   }
   if (!accessToken) {
-    return { ok: false, error: 'Brak tokenu dostępu.' };
+    return { ok: false, error: 'Missing access token.' };
   }
 
   try {
@@ -240,7 +240,7 @@ export async function logoutAllSessions(): Promise<AuthActionResult> {
 
     return { ok: true };
   } catch {
-    return { ok: false, error: 'Błąd sieci podczas wylogowania ze wszystkich sesji.' };
+    return { ok: false, error: 'Network error during logout from all sessions.' };
   }
 }
 
@@ -250,7 +250,7 @@ export async function loginWithPassword(
 ): Promise<{ ok: boolean; error?: string }> {
   const baseUrl = getBaseUrl();
   if (!baseUrl) {
-    return { ok: false, error: 'Brak VITE_API_URL.' };
+    return { ok: false, error: 'Missing VITE_API_URL.' };
   }
 
   const response = await fetch(`${baseUrl}${LOGIN_ENDPOINT}`, {
@@ -284,7 +284,7 @@ export async function loginWithPassword(
     clearStoredTokens();
     return {
       ok: false,
-      error: 'Nieprawidłowa odpowiedź logowania (brak access/refresh).',
+      error: 'Invalid login response (missing access/refresh).',
     };
   }
 

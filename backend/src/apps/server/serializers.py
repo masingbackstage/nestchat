@@ -62,3 +62,27 @@ class ChannelDetailSerializer(serializers.ModelSerializer):
             "allowed_roles",
             "created_at",
         ]
+
+
+class MemberRoleSerializer(serializers.Serializer):
+    uuid = serializers.UUIDField()
+    name = serializers.CharField()
+
+
+class ServerMemberItemSerializer(serializers.Serializer):
+    uuid = serializers.UUIDField()
+    display_name = serializers.CharField()
+    is_online = serializers.BooleanField()
+    roles = MemberRoleSerializer(many=True)
+    avatar = serializers.CharField(allow_null=True, required=False)
+    custom_status = serializers.CharField(allow_null=True, required=False)
+
+
+class ServerMembersGroupSerializer(serializers.Serializer):
+    key = serializers.CharField()
+    label = serializers.CharField()
+    members = ServerMemberItemSerializer(many=True)
+
+
+class ServerMembersResponseSerializer(serializers.Serializer):
+    groups = ServerMembersGroupSerializer(many=True)

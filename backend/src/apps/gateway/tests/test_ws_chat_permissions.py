@@ -341,6 +341,75 @@ def test_ws_delete_message_marks_message_deleted():
 
 @pytest.mark.django_db(transaction=True)
 @override_settings(CHANNEL_LAYERS={"default": {"BACKEND": "channels.layers.InMemoryChannelLayer"}})
+def test_ws_presence_status_changed_broadcasts_to_other_server_members():
+    owner = CustomUser.objects.create_user(email="owner-presence@example.com", password="pw")
+    member = CustomUser.objects.create_user(email="member-presence@example.com", password="pw")
+    server = Server.objects.create(name="Presence Server", owner=owner)
+    ServerMember.objects.create(user=member, server=server)
+
+    async def scenario():
+        owner_communicator = WebsocketCommunicator(application, _ws_path_for_user(owner))
+        connected_owner, _ = await owner_communicator.connect()
+        assert connected_owner is True
+
+        member_communicator = WebsocketCommunicator(application, _ws_path_for_user(member))
+        connected_member, _ = await member_communicator.connect()
+        assert connected_member is True
+
+        connected_events = [
+            await owner_communicator.receive_json_from(timeout=1),
+            await owner_communicator.receive_json_from(timeout=1),
+            await owner_communicator.receive_json_from(timeout=1),
+            await owner_communicator.receive_json_from(timeout=1),
+        ]
+
+        await member_communicator.disconnect()
+        disconnected_events = [
+            await owner_communicator.receive_json_from(timeout=1),
+            await owner_communicator.receive_json_from(timeout=1),
+        ]
+
+        await owner_communicator.disconnect()
+        return connected_events, disconnected_events
+
+    connected_events, disconnected_events = async_to_sync(scenario)()
+    connected_status_event = next(
+        event
+        for event in connected_events
+        if event["action"] == "status_changed"
+        and event["payload"]["member_uuid"] == str(member.uuid)
+    )
+    connected_members_changed_event = next(
+        event for event in connected_events if event["action"] == "members_changed"
+    )
+    disconnected_status_event = next(
+        event for event in disconnected_events if event["action"] == "status_changed"
+    )
+    disconnected_members_changed_event = next(
+        event for event in disconnected_events if event["action"] == "members_changed"
+    )
+
+    assert str(connected_status_event["module"]).lower() == "presence"
+    assert connected_status_event["payload"]["server_uuid"] == str(server.uuid)
+    assert connected_status_event["payload"]["member_uuid"] == str(member.uuid)
+    assert connected_status_event["payload"]["is_online"] is True
+
+    assert str(connected_members_changed_event["module"]).lower() == "presence"
+    assert connected_members_changed_event["payload"]["server_uuid"] == str(server.uuid)
+    assert connected_members_changed_event["payload"]["reason"] == "presence_changed"
+
+    assert str(disconnected_status_event["module"]).lower() == "presence"
+    assert disconnected_status_event["payload"]["server_uuid"] == str(server.uuid)
+    assert disconnected_status_event["payload"]["member_uuid"] == str(member.uuid)
+    assert disconnected_status_event["payload"]["is_online"] is False
+
+    assert str(disconnected_members_changed_event["module"]).lower() == "presence"
+    assert disconnected_members_changed_event["payload"]["server_uuid"] == str(server.uuid)
+    assert disconnected_members_changed_event["payload"]["reason"] == "presence_changed"
+
+
+@pytest.mark.django_db(transaction=True)
+@override_settings(CHANNEL_LAYERS={"default": {"BACKEND": "channels.layers.InMemoryChannelLayer"}})
 def test_ws_toggle_reaction_broadcasts_updated_snapshot():
     owner = CustomUser.objects.create_user(email="owner-ws11@example.com", password="pw")
     user = CustomUser.objects.create_user(email="member-ws11@example.com", password="pw")

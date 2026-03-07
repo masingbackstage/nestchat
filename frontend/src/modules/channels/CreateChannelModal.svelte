@@ -56,14 +56,14 @@
 <svelte:window on:keydown={handleWindowKeydown} />
 
 <div
-  class="fixed inset-0 z-40 flex items-center justify-center bg-slate-950/70 px-4"
+  class="fixed inset-0 z-[80] flex items-center justify-center bg-surface-950/80 px-4 backdrop-blur-sm"
   role="presentation"
   on:pointerdown={handleOverlayPointerDown}
   in:fade={{ duration: 150 }}
   out:fade={{ duration: 130 }}
 >
   <div
-    class="w-full max-w-md rounded-lg border border-slate-700 bg-app-900 p-5 shadow-2xl"
+    class="glass-panel-strong w-full max-w-md rounded-[1.1rem] p-5"
     role="dialog"
     aria-modal="true"
     in:scale={{ duration: 180, start: 0.96 }}
@@ -71,58 +71,58 @@
   >
     <form on:submit|preventDefault={submit}>
       <div class="mb-4 flex items-center justify-between">
-        <h2 class="text-lg font-semibold text-slate-100">Utwórz kanał</h2>
+        <h2 class="text-lg font-semibold text-slate-100">Create channel</h2>
         <button
           type="button"
-          class="rounded border border-slate-700 px-2 py-1 text-xs text-slate-300 transition hover:border-slate-500 hover:text-slate-100"
+          class="rounded-lg border border-white/15 px-2 py-1 text-xs text-muted-200 transition hover:border-glass-highlight hover:text-slate-100"
           on:click={requestClose}
           disabled={isSubmitting}
         >
-          Zamknij
+          Close
         </button>
       </div>
 
       <div class="space-y-3">
-        <label class="block text-sm text-slate-300">
-          Nazwa
+        <label class="block text-sm text-muted-100">
+          Name
           <input
             bind:value={name}
             type="text"
-            class="mt-1 w-full rounded border border-slate-700 bg-slate-800 px-3 py-2 text-sm text-slate-100 outline-none transition focus:border-indigo-500"
+            class="mt-1 w-full rounded-xl border border-white/15 bg-white/5 px-3 py-2 text-sm text-slate-100 outline-none transition placeholder:text-muted-500 focus:border-accent-400"
             placeholder="general"
             required
           />
         </label>
 
-        <label class="block text-sm text-slate-300">
-          Typ kanału
+        <label class="block text-sm text-muted-100">
+          Channel type
           <select
             bind:value={channelType}
-            class="mt-1 w-full rounded border border-slate-700 bg-slate-800 px-3 py-2 text-sm text-slate-100 outline-none transition focus:border-indigo-500"
+            class="mt-1 w-full rounded-xl border border-white/15 bg-surface-900 px-3 py-2 text-sm text-slate-100 outline-none transition focus:border-accent-400"
           >
             <option value="TEXT">TEXT</option>
             <option value="VOICE">VOICE</option>
           </select>
         </label>
 
-        <label class="block text-sm text-slate-300">
-          Topic (opcjonalnie)
+        <label class="block text-sm text-muted-100">
+          Topic (optional)
           <input
             bind:value={topic}
             type="text"
-            class="mt-1 w-full rounded border border-slate-700 bg-slate-800 px-3 py-2 text-sm text-slate-100 outline-none transition focus:border-indigo-500"
-            placeholder="Opis kanału"
+            class="mt-1 w-full rounded-xl border border-white/15 bg-white/5 px-3 py-2 text-sm text-slate-100 outline-none transition placeholder:text-muted-500 focus:border-accent-400"
+            placeholder="Channel description"
           />
         </label>
 
-        <label class="block text-sm text-slate-300">
-          Widoczność
+        <label class="block text-sm text-muted-100">
+          Visibility
           <select
             bind:value={isPublic}
-            class="mt-1 w-full rounded border border-slate-700 bg-slate-800 px-3 py-2 text-sm text-slate-100 outline-none transition focus:border-indigo-500"
+            class="mt-1 w-full rounded-xl border border-white/15 bg-surface-900 px-3 py-2 text-sm text-slate-100 outline-none transition focus:border-accent-400"
           >
-            <option value={true}>Publiczny</option>
-            <option value={false}>Prywatny</option>
+            <option value={true}>Public</option>
+            <option value={false}>Private</option>
           </select>
         </label>
       </div>
@@ -130,18 +130,18 @@
       <div class="mt-5 flex gap-2">
         <button
           type="submit"
-          class="flex-1 rounded bg-indigo-600 px-4 py-2 text-sm font-medium text-white transition hover:bg-indigo-500 disabled:cursor-not-allowed disabled:bg-slate-700"
+          class="flex-1 rounded-xl bg-accent-500 px-4 py-2 text-sm font-medium text-white transition hover:bg-accent-400 disabled:cursor-not-allowed disabled:bg-surface-800"
           disabled={isSubmitting || !name.trim()}
         >
-          {isSubmitting ? 'Tworzenie...' : 'Utwórz'}
+          {isSubmitting ? 'Creating...' : 'Create'}
         </button>
         <button
           type="button"
-          class="rounded border border-slate-700 px-4 py-2 text-sm text-slate-300 transition hover:border-slate-500 hover:text-slate-100"
+          class="rounded-xl border border-white/15 px-4 py-2 text-sm text-muted-200 transition hover:border-glass-highlight hover:text-slate-100"
           on:click={requestClose}
           disabled={isSubmitting}
         >
-          Anuluj
+          Cancel
         </button>
       </div>
     </form>

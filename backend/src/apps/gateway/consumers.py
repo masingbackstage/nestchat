@@ -44,9 +44,12 @@ class GatewayConsumer(AsyncWebsocketConsumer):
         for group in self.channel_groups:
             await self.channel_layer.group_add(group, self.channel_name)
 
+        await self.emit_presence_status_changed(True)
+
     async def disconnect(self, close_code):
         if hasattr(self, "user") and not self.user.is_anonymous:
             await self.set_online_status(False)
+            await self.emit_presence_status_changed(False)
 
             await self.channel_layer.group_discard(self.personal_group, self.channel_name)
             if hasattr(self, "channel_groups"):
@@ -357,6 +360,41 @@ class GatewayConsumer(AsyncWebsocketConsumer):
     async def gateway_send(self, data_dict):
         await self.send(text_data=json.dumps(data_dict))
 
+    async def emit_presence_status_changed(self, is_online):
+        targets = await self.get_presence_targets()
+        timestamp = timezone.now().isoformat()
+        for target in targets:
+            status_payload = {
+                "server_uuid": target["server_uuid"],
+                "member_uuid": str(self.user.uuid),
+                "is_online": is_online,
+                "timestamp": timestamp,
+            }
+            members_changed_payload = {
+                "server_uuid": target["server_uuid"],
+                "reason": "presence_changed",
+                "timestamp": timestamp,
+            }
+            for group_name in target["recipient_group_names"]:
+                await self.channel_layer.group_send(
+                    group_name,
+                    {
+                        "type": "gateway_send_event",
+                        "module": ModuleType.PRESENCE.value,
+                        "action": "status_changed",
+                        "payload": status_payload,
+                    },
+                )
+                await self.channel_layer.group_send(
+                    group_name,
+                    {
+                        "type": "gateway_send_event",
+                        "module": ModuleType.PRESENCE.value,
+                        "action": "members_changed",
+                        "payload": members_changed_payload,
+                    },
+                )
+
     @database_sync_to_async
     def set_online_status(self, is_online):
         Profile.objects.filter(user=self.user).update(is_online=is_online)
@@ -366,6 +404,25 @@ class GatewayConsumer(AsyncWebsocketConsumer):
         servers = Server.objects.filter(members=self.user) | Server.objects.filter(owner=self.user)
         channels = Channel.objects.filter(server__in=servers.distinct())
         return [f"channel_{channel.uuid}" for channel in channels]
+
+    @database_sync_to_async
+    def get_presence_targets(self):
+        servers = (
+            Server.objects.filter(members=self.user) | Server.objects.filter(owner=self.user)
+        ).distinct()
+        targets = []
+        for server in servers.prefetch_related("members"):
+            member_pks = set(server.members.values_list("pk", flat=True))
+            member_pks.add(server.owner_id)
+            if not member_pks:
+                continue
+            targets.append(
+                {
+                    "server_uuid": str(server.uuid),
+                    "recipient_group_names": [f"user_{member_pk}" for member_pk in member_pks],
+                }
+            )
+        return targets
 
     @database_sync_to_async
     def get_allowed_channel(self, channel_uuid):

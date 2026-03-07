@@ -19,7 +19,7 @@ function mapChannelResponse(payload: unknown): Channel {
 export async function createChannel(serverUuid: string, data: CreateChannelRequest): Promise<Channel> {
   const baseUrl = import.meta.env.VITE_API_URL;
   if (!baseUrl) {
-    throw new Error('Brak VITE_API_URL.');
+    throw new Error('Missing VITE_API_URL.');
   }
 
   const response = await authFetch(`${baseUrl}/servers/${serverUuid}/channels/`, {

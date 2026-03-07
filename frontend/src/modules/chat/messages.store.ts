@@ -240,7 +240,7 @@ async function fetchMessagesPage(
   const baseUrl = getBaseUrl();
 
   if (!baseUrl) {
-    throw new Error('Brak VITE_API_URL.');
+    throw new Error('Missing VITE_API_URL.');
   }
 
   const params = new URLSearchParams({
@@ -406,7 +406,7 @@ async function fetchInitialMessages(channelUuid: string, background: boolean): P
 
       patchChannelState(channelUuid, {
         isLoadingInitial: false,
-        error: error instanceof Error ? error.message : 'Błąd ładowania wiadomości.',
+        error: error instanceof Error ? error.message : 'Failed to load messages.',
       });
     } finally {
       inFlightInitialByChannel[channelUuid] = undefined;
@@ -462,7 +462,7 @@ export async function loadOlderMessages(channelUuid: string): Promise<void> {
     } catch (error) {
       patchChannelState(channelUuid, {
         isLoadingOlder: false,
-        error: error instanceof Error ? error.message : 'Błąd ładowania starszych wiadomości.',
+        error: error instanceof Error ? error.message : 'Failed to load older messages.',
       });
     } finally {
       inFlightOlderByChannel[channelUuid] = undefined;
@@ -493,7 +493,7 @@ export async function loadNewerMessages(channelUuid: string): Promise<void> {
     } catch (error) {
       patchChannelState(channelUuid, {
         isLoadingNewer: false,
-        error: error instanceof Error ? error.message : 'Błąd ładowania nowszych wiadomości.',
+        error: error instanceof Error ? error.message : 'Failed to load newer messages.',
       });
     } finally {
       inFlightNewerByChannel[channelUuid] = undefined;
@@ -528,7 +528,7 @@ export async function syncChannelFromLatestCursor(channelUuid: string): Promise<
     } catch (error) {
       patchChannelState(channelUuid, {
         isLoadingNewer: false,
-        error: error instanceof Error ? error.message : 'Błąd synchronizacji wiadomości.',
+        error: error instanceof Error ? error.message : 'Failed to synchronize messages.',
       });
     } finally {
       inFlightNewerByChannel[channelUuid] = undefined;

@@ -2,7 +2,13 @@
 @tailwind components;
 @tailwind utilities;
 
+@import url('https://fonts.googleapis.com/css2?family=Public+Sans:wght@300;400;500;600;700&display=swap');
+
 @layer base {
+  :root {
+    color-scheme: dark;
+  }
+
   * {
     box-sizing: border-box;
   }
@@ -12,11 +18,63 @@
   #app {
     margin: 0;
     width: 100%;
-    min-height: 100%;
+    min-height: 100vh;
   }
 
   body {
-    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-    @apply bg-app-950 text-slate-100;
+    font-family: 'Public Sans', 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    @apply bg-surface-950 text-slate-100 antialiased;
+    background-image: radial-gradient(circle at 18% 18%, rgba(236, 91, 19, 0.14), transparent 38%),
+      radial-gradient(circle at 84% 8%, rgba(78, 122, 255, 0.18), transparent 44%),
+      linear-gradient(135deg, #090b13 0%, #0d1020 45%, #090b13 100%);
+    background-attachment: fixed;
+  }
+}
+
+@layer components {
+  .app-shell {
+    @apply relative h-screen w-full overflow-hidden p-2 sm:p-3;
+  }
+
+  .ambient-blob {
+    @apply pointer-events-none absolute rounded-full blur-[120px];
+  }
+
+  .glass-panel {
+    @apply border border-glass-border bg-panel-soft shadow-panel backdrop-blur-xl;
+  }
+
+  .glass-panel-muted {
+    @apply border border-glass-border bg-panel-muted shadow-panel backdrop-blur-xl;
+  }
+
+  .glass-panel-strong {
+    @apply border border-glass-border bg-panel-strong shadow-panel backdrop-blur-xl;
+  }
+
+  .app-scrollbar {
+    scrollbar-width: thin;
+    scrollbar-color: rgba(152, 162, 194, 0.45) transparent;
+  }
+
+  .app-scrollbar::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+
+  .app-scrollbar::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  .app-scrollbar::-webkit-scrollbar-thumb {
+    background: rgba(152, 162, 194, 0.45);
+    border-radius: 999px;
+  }
+
+  .text-gradient {
+    background: linear-gradient(120deg, #f8fbff 0%, #cdd5ea 100%);
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
   }
 }

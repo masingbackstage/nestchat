@@ -1,13 +1,13 @@
 <script lang="ts">
   import { tick } from 'svelte';
+  import { fade, scale } from 'svelte/transition';
+  import { Bell, Hash, HelpCircle, Pin, Search, Users } from 'lucide-svelte';
   import { getCurrentUserUuid } from '../../lib/auth';
   import { sendDeleteMessage, sendEditMessage, sendToggleReaction } from '../../lib/socket';
   import { pushToast } from '../../lib/stores/toast';
   import { activeChannel, activeServer } from '../../lib/stores/ui';
   import {
-    MAX_MESSAGES_PER_CHANNEL,
     channelQueryStateById,
-    chatConnectionStatus,
     lastReadMessageUuidByChannel,
     loadNewerMessages,
     loadOlderMessages,
@@ -222,7 +222,7 @@
     markBusy(messageUuid, true);
     const sent = sendEditMessage(messageUuid, content);
     if (!sent) {
-      pushToast({ type: 'error', message: 'Brak połączenia z gateway.' });
+      pushToast({ type: 'error', message: 'Gateway connection is unavailable.' });
     }
     await tick();
     markBusy(messageUuid, false);
@@ -234,7 +234,7 @@
     const { messageUuid, emoji } = event.detail;
     const sent = sendToggleReaction(messageUuid, emoji);
     if (!sent) {
-      pushToast({ type: 'error', message: 'Brak połączenia z gateway.' });
+      pushToast({ type: 'error', message: 'Gateway connection is unavailable.' });
     }
   }
 
@@ -265,7 +265,7 @@
     markBusy(messageUuid, true);
     const sent = sendDeleteMessage(messageUuid);
     if (!sent) {
-      pushToast({ type: 'error', message: 'Brak połączenia z gateway.' });
+      pushToast({ type: 'error', message: 'Gateway connection is unavailable.' });
       isDeleteConfirmSubmitting = false;
       markBusy(messageUuid, false);
       return;
@@ -277,52 +277,76 @@
   }
 </script>
 
-<section class="flex min-w-0 flex-1 flex-col bg-app-850" aria-label="Chat">
-  <header
-    class="flex h-12 items-center gap-2 border-b border-slate-700 px-4 text-sm font-bold text-slate-100"
-  >
+<section class="glass-panel flex min-w-0 flex-1 flex-col rounded-panel" aria-label="Chat">
+  <header class="flex h-16 items-center border-b border-white/10 px-5">
     {#if $activeChannel}
-      <span aria-hidden="true" class="text-slate-500">#</span>
-      <h2 class="truncate">{$activeChannel.name}</h2>
-      <span class="rounded bg-slate-800 px-2 py-0.5 text-xs font-normal text-slate-400">
-        {currentMessages.length}/{MAX_MESSAGES_PER_CHANNEL}
-      </span>
+      <Hash class="h-5 w-5 text-muted-400" aria-hidden="true" />
+      <h2 class="truncate text-lg font-semibold text-slate-100">{$activeChannel.name}</h2>
+      <span class="mx-3 h-4 w-px bg-white/15"></span>
     {:else}
-      <h2>Wybierz kanał</h2>
+      <h2 class="text-lg font-semibold text-slate-100">Select a channel</h2>
     {/if}
 
-    <span class="ml-auto rounded bg-slate-800 px-2 py-0.5 text-xs font-normal text-slate-400">
-      WS: {$chatConnectionStatus}
-    </span>
+    <div class="ml-auto hidden items-center gap-4 text-muted-300 md:flex">
+      <button type="button" class="rounded p-1.5 transition hover:bg-white/10 hover:text-slate-100" aria-label="Powiadomienia">
+        <Bell class="h-4 w-4" />
+      </button>
+      <button type="button" class="rounded p-1.5 transition hover:bg-white/10 hover:text-slate-100" aria-label="Pinned">
+        <Pin class="h-4 w-4" />
+      </button>
+      <button type="button" class="rounded p-1.5 transition hover:bg-white/10 hover:text-slate-100" aria-label="Members">
+        <Users class="h-4 w-4" />
+      </button>
+      <div class="flex items-center gap-2 rounded-xl border border-white/10 bg-white/5 px-2.5 py-1.5">
+        <input
+          type="text"
+          readonly
+          value=""
+          placeholder="Search"
+          class="w-24 bg-transparent text-xs text-muted-200 outline-none placeholder:text-muted-500"
+        />
+        <Search class="h-3.5 w-3.5 text-muted-400" />
+      </div>
+      <button type="button" class="rounded p-1.5 transition hover:bg-white/10 hover:text-slate-100" aria-label="Help">
+        <HelpCircle class="h-4 w-4" />
+      </button>
+    </div>
+
   </header>
 
   <div class="flex min-h-0 flex-1 flex-col">
-    <div class="flex-1 space-y-1 overflow-auto p-3" bind:this={messagesContainer} on:scroll={handleScroll}>
+    <div class="app-scrollbar flex-1 space-y-1 overflow-auto px-4 py-4" bind:this={messagesContainer} on:scroll={handleScroll}>
       {#if $activeChannel && (currentChannelQuery?.isLoadingOlder || currentChannelQuery?.hasMoreOlder)}
-        <p class="mb-2 text-xs text-slate-400">
+        <p class="mb-2 text-xs text-muted-300">
           {#if currentChannelQuery?.isLoadingOlder}
-            Ładowanie starszych wiadomości...
+            Loading older messages...
           {:else}
-            Dostępne starsze wiadomości.
+            Older messages available.
           {/if}
         </p>
       {/if}
 
       {#if !$activeChannel}
-        <p class="text-sm text-slate-400">Wybierz serwer i kanał, aby rozpocząć rozmowę.</p>
+        <p class="text-sm text-muted-300">Select a server and channel to start chatting.</p>
       {:else if isInitialLoading}
-        <p class="text-sm text-slate-400">Ładowanie wiadomości...</p>
+        <p class="text-sm text-muted-300">Loading messages...</p>
       {:else if currentMessages.length === 0}
-        <p class="text-sm text-slate-400">Brak wiadomości na tym kanale.</p>
+        <div class="rounded-2xl border border-white/10 bg-white/5 p-5">
+          <div class="mb-3 flex h-12 w-12 items-center justify-center rounded-2xl bg-accent-500/20 text-accent-300">
+            <Hash class="h-6 w-6" />
+          </div>
+          <p class="text-2xl font-semibold text-slate-100">Welcome to #{$activeChannel.name}!</p>
+          <p class="mt-2 text-sm text-muted-200">This is the start of this channel. Send the first message.</p>
+        </div>
       {:else}
         {#each currentMessages as message, index (message.uuid)}
           {#if firstNewMessageIndex === index}
             <div class="my-2 flex items-center gap-2">
-              <div class="h-px flex-1 bg-emerald-500/40"></div>
-              <p class="text-[11px] font-semibold uppercase tracking-wide text-emerald-300">
-                Nowe wiadomości
+              <div class="h-px flex-1 bg-accent-500/50"></div>
+              <p class="text-[11px] font-semibold uppercase tracking-wide text-accent-300">
+                New messages
               </p>
-              <div class="h-px flex-1 bg-emerald-500/40"></div>
+              <div class="h-px flex-1 bg-accent-500/50"></div>
             </div>
           {/if}
           <MessageItem
@@ -337,26 +361,26 @@
       {/if}
 
       {#if $activeChannel && currentChannelQuery?.error}
-        <p class="mt-2 text-xs text-amber-300">
-          Nie udało się odświeżyć wiadomości. Pokazuję ostatnią dostępną wersję.
+        <p class="mt-2 text-xs text-amber-200">
+          Failed to refresh messages. Showing the latest cached version.
         </p>
       {/if}
 
       {#if $activeChannel && currentChannelQuery?.isLoadingNewer}
-        <p class="mt-2 text-xs text-slate-400">
-          Ładowanie nowszych wiadomości...
+        <p class="mt-2 text-xs text-muted-300">
+          Loading newer messages...
         </p>
       {/if}
     </div>
 
     {#if $activeChannel && currentChannelQuery?.hasMoreNewer && !isViewportNearBottom}
-      <div class="px-3 pb-2">
+      <div class="px-4 pb-2">
         <button
           type="button"
-          class="rounded-full border border-emerald-500/30 bg-emerald-500/10 px-3 py-1 text-xs text-emerald-200 transition hover:bg-emerald-500/20"
+          class="rounded-pill border border-accent-500/35 bg-accent-500/15 px-3 py-1 text-xs text-accent-300 transition hover:bg-accent-500/25"
           on:click={jumpToLatest}
         >
-          Dostępne nowsze wiadomości
+          Newer messages available
         </button>
       </div>
     {/if}
@@ -367,39 +391,43 @@
 
 {#if pendingDeleteMessageUuid}
   <div
-    class="fixed inset-0 z-40 flex items-center justify-center bg-slate-950/70 p-4"
+    class="fixed inset-0 z-[70] flex items-center justify-center bg-surface-950/75 p-4 backdrop-blur-sm"
     role="presentation"
     on:click={handleDeleteOverlayClick}
+    in:fade={{ duration: 130 }}
+    out:fade={{ duration: 120 }}
   >
     <div
-      class="w-full max-w-sm rounded-lg border border-slate-700 bg-slate-900 p-4 shadow-xl"
+      class="glass-panel-strong w-full max-w-sm rounded-2xl p-4"
       role="dialog"
       aria-modal="true"
       aria-labelledby="delete-message-title"
       tabindex="-1"
+      in:scale={{ duration: 170, start: 0.96 }}
+      out:scale={{ duration: 120, start: 1 }}
     >
       <h3 id="delete-message-title" class="text-base font-semibold text-slate-100">
-        Usunąć wiadomość?
+        Delete this message?
       </h3>
-      <p class="mt-2 text-sm text-slate-400">
-        Tej operacji nie da się cofnąć.
+      <p class="mt-2 text-sm text-muted-200">
+        This action cannot be undone.
       </p>
       <div class="mt-4 flex items-center justify-end gap-2">
         <button
           type="button"
-          class="rounded border border-slate-700 px-3 py-1.5 text-sm text-slate-300 transition hover:border-slate-500 disabled:opacity-60"
+          class="rounded-xl border border-white/15 px-3 py-1.5 text-sm text-muted-200 transition hover:border-glass-highlight disabled:opacity-60"
           on:click={cancelDeleteConfirmation}
           disabled={isDeleteConfirmSubmitting}
         >
-          Anuluj
+          Cancel
         </button>
         <button
           type="button"
-          class="rounded bg-red-600 px-3 py-1.5 text-sm font-medium text-white transition hover:bg-red-500 disabled:opacity-60"
+          class="rounded-xl bg-red-600 px-3 py-1.5 text-sm font-medium text-white transition hover:bg-red-500 disabled:opacity-60"
           on:click={confirmDeleteMessage}
           disabled={isDeleteConfirmSubmitting}
         >
-          {isDeleteConfirmSubmitting ? 'Usuwanie...' : 'Usuń'}
+          {isDeleteConfirmSubmitting ? 'Deleting...' : 'Delete'}
         </button>
       </div>
     </div>

@@ -31,6 +31,50 @@ export type MessageReaction = {
   reactedByMe?: boolean;
 };
 
+export type MemberRole = {
+  uuid: string;
+  name: string;
+};
+
+export type ServerMemberItem = {
+  uuid: string;
+  displayName?: string;
+  display_name?: string;
+  isOnline?: boolean;
+  is_online?: boolean;
+  roles?: MemberRole[];
+  avatar?: string | null;
+  customStatus?: string | null;
+  custom_status?: string | null;
+};
+
+export type ServerMembersGroup = {
+  key: string;
+  label: string;
+  members: ServerMemberItem[];
+};
+
+export type ServerMembersResponse = {
+  groups: ServerMembersGroup[];
+};
+
+export type PresenceStatusChangedPayload = {
+  serverUuid?: string;
+  server_uuid?: string;
+  memberUuid?: string;
+  member_uuid?: string;
+  isOnline?: boolean;
+  is_online?: boolean;
+  timestamp?: string;
+};
+
+export type PresenceMembersChangedPayload = {
+  serverUuid?: string;
+  server_uuid?: string;
+  reason?: string;
+  timestamp?: string;
+};
+
 export type Message = {
   uuid: string;
   channel_uuid: string;
