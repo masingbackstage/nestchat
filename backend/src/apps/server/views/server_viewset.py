@@ -10,8 +10,8 @@ from src.apps.server.models import Channel, Role, Server
 from src.apps.server.serializers import (
     ChannelCreateSerializer,
     ChannelDetailSerializer,
-    ServerMembersResponseSerializer,
     ServerListSerializer,
+    ServerMembersResponseSerializer,
 )
 
 

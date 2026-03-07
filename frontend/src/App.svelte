@@ -1,14 +1,14 @@
 <script lang="ts">
   import { onDestroy, onMount } from 'svelte';
-import {
-  authFetch,
-  clearAuthTokens,
-  getValidAccessToken,
-  logoutAllSessions,
-  logoutCurrentSession,
-  setAuthFailureHandler,
-} from './lib/auth';
-import { pushToast } from './lib/stores/toast';
+  import {
+    authFetch,
+    clearAuthTokens,
+    getValidAccessToken,
+    logoutAllSessions,
+    logoutCurrentSession,
+    setAuthFailureHandler,
+  } from './lib/auth';
+  import { pushToast } from './lib/stores/toast';
   import { servers } from './lib/stores/servers';
   import { activeServer, activeChannel } from './lib/stores/ui';
   import {
@@ -217,9 +217,7 @@ import { pushToast } from './lib/stores/toast';
         channel_uuid: channelUuid,
         content: payload.content,
         author:
-          payload.authorProfileDisplayName ??
-          payload.author_profile_display_name ??
-          payload.author,
+          payload.authorProfileDisplayName ?? payload.author_profile_display_name ?? payload.author,
         author_uuid: payload.author_uuid ?? (payload.author ? String(payload.author) : undefined),
         is_deleted: Boolean(payload.isDeleted ?? payload.is_deleted ?? false),
         is_edited: Boolean(payload.isEdited ?? payload.is_edited ?? false),
@@ -319,7 +317,6 @@ import { pushToast } from './lib/stores/toast';
           void resyncAfterReconnect();
         });
       }
-
     } catch (error) {
       console.error('Failed to load servers:', error);
       servers.set([]);
@@ -387,7 +384,10 @@ import { pushToast } from './lib/stores/toast';
       lastReadMarkerByChannel[channelUuid] = latestMessageUuid;
       void markChannelAsRead(channelUuid, latestMessageUuid);
       readStateFetchedAtByChannel[channelUuid] = Date.now();
-    } else if (!latestMessageUuid && lastReadMarkerByChannel[channelUuid] !== EMPTY_CHANNEL_MARKER) {
+    } else if (
+      !latestMessageUuid &&
+      lastReadMarkerByChannel[channelUuid] !== EMPTY_CHANNEL_MARKER
+    ) {
       lastReadMarkerByChannel[channelUuid] = EMPTY_CHANNEL_MARKER;
       readStateFetchedAtByChannel[channelUuid] = Date.now();
       void fetchChannelReadState(channelUuid);
@@ -445,64 +445,64 @@ import { pushToast } from './lib/stores/toast';
 </script>
 
 {#if isBootstrapping}
-  <div class="flex h-screen w-full items-center justify-center bg-surface-950 text-sm text-muted-300">
+  <div
+    class="flex h-screen w-full items-center justify-center bg-surface-950 text-sm text-muted-300"
+  >
     Loading...
   </div>
-{:else}
-  {#if routePath === '/'}
-    <LandingPage
-      on:startLogin={() => {
-        navigate('/app', 'login');
-      }}
-      on:startRegister={() => {
+{:else if routePath === '/'}
+  <LandingPage
+    on:startLogin={() => {
+      navigate('/app', 'login');
+    }}
+    on:startRegister={() => {
+      navigate('/app', 'register');
+    }}
+  />
+{:else if !isAuthenticated}
+  {#if authMode === 'login'}
+    <LoginForm
+      on:authenticated={handleAuthenticated}
+      on:switchToRegister={() => {
         navigate('/app', 'register');
       }}
     />
-  {:else if !isAuthenticated}
-    {#if authMode === 'login'}
-      <LoginForm
-        on:authenticated={handleAuthenticated}
-        on:switchToRegister={() => {
-          navigate('/app', 'register');
-        }}
-      />
-    {:else}
-      <RegisterForm
-        on:authenticated={handleAuthenticated}
-        on:switchToLogin={() => {
-          navigate('/app', 'login');
-        }}
-      />
-    {/if}
   {:else}
-    <div class="app-shell">
-      <div class="ambient-blob left-[-10%] top-[-20%] h-[420px] w-[420px] bg-accent-500/25"></div>
-      <div class="ambient-blob right-[-10%] top-[5%] h-[460px] w-[460px] bg-indigo-500/20"></div>
-      <div class="ambient-blob bottom-[-20%] left-[35%] h-[380px] w-[380px] bg-cyan-500/15"></div>
+    <RegisterForm
+      on:authenticated={handleAuthenticated}
+      on:switchToLogin={() => {
+        navigate('/app', 'login');
+      }}
+    />
+  {/if}
+{:else}
+  <div class="app-shell">
+    <div class="ambient-blob left-[-10%] top-[-20%] h-[420px] w-[420px] bg-accent-500/25"></div>
+    <div class="ambient-blob right-[-10%] top-[5%] h-[460px] w-[460px] bg-indigo-500/20"></div>
+    <div class="ambient-blob bottom-[-20%] left-[35%] h-[380px] w-[380px] bg-cyan-500/15"></div>
 
-      <div class="relative flex h-full w-full gap-2.5 text-slate-100 lg:gap-3">
-        <ServerList
-          on:openSettings={() => {
-            isSettingsOpen = true;
-          }}
-        />
-        <ChannelList />
-        <ChatWindow />
-        <MemberSidebar />
-      </div>
-    </div>
-    {#if isSettingsOpen}
-      <SettingsModal
-        isSubmitting={isSettingsSubmitting}
-        on:close={() => {
-          if (!isSettingsSubmitting) {
-            isSettingsOpen = false;
-          }
+    <div class="relative flex h-full w-full gap-2.5 text-slate-100 lg:gap-3">
+      <ServerList
+        on:openSettings={() => {
+          isSettingsOpen = true;
         }}
-        on:logoutCurrent={handleLogout}
-        on:logoutAll={handleLogoutAllSessions}
       />
-    {/if}
+      <ChannelList />
+      <ChatWindow />
+      <MemberSidebar />
+    </div>
+  </div>
+  {#if isSettingsOpen}
+    <SettingsModal
+      isSubmitting={isSettingsSubmitting}
+      on:close={() => {
+        if (!isSettingsSubmitting) {
+          isSettingsOpen = false;
+        }
+      }}
+      on:logoutCurrent={handleLogout}
+      on:logoutAll={handleLogoutAllSessions}
+    />
   {/if}
 {/if}
 

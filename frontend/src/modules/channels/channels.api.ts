@@ -1,7 +1,11 @@
 import { authFetch } from '../../lib/auth';
 import type { Channel, CreateChannelRequest } from '../../types/gateway';
 
-function pick<T>(payload: Record<string, unknown>, camelKey: string, snakeKey: string): T | undefined {
+function pick<T>(
+  payload: Record<string, unknown>,
+  camelKey: string,
+  snakeKey: string,
+): T | undefined {
   return (payload[camelKey] as T | undefined) ?? (payload[snakeKey] as T | undefined);
 }
 
@@ -16,7 +20,10 @@ function mapChannelResponse(payload: unknown): Channel {
   };
 }
 
-export async function createChannel(serverUuid: string, data: CreateChannelRequest): Promise<Channel> {
+export async function createChannel(
+  serverUuid: string,
+  data: CreateChannelRequest,
+): Promise<Channel> {
   const baseUrl = import.meta.env.VITE_API_URL;
   if (!baseUrl) {
     throw new Error('Missing VITE_API_URL.');

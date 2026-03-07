@@ -102,12 +102,11 @@
 <div class="app-shell flex items-center justify-center px-4">
   <div class="ambient-blob left-[-14%] top-[-10%] h-[460px] w-[460px] bg-accent-500/20"></div>
   <div class="ambient-blob right-[-10%] top-[10%] h-[420px] w-[420px] bg-indigo-500/20"></div>
-  <form
-    class="glass-panel w-full max-w-sm rounded-[1.1rem] p-6"
-    on:submit|preventDefault={submit}
-  >
+  <form class="glass-panel w-full max-w-sm rounded-[1.1rem] p-6" on:submit|preventDefault={submit}>
     <div class="mb-4 flex items-center gap-2">
-      <div class="flex h-8 w-8 items-center justify-center rounded-lg bg-accent-500/20 text-accent-300">
+      <div
+        class="flex h-8 w-8 items-center justify-center rounded-lg bg-accent-500/20 text-accent-300"
+      >
         <UserPlus class="h-4 w-4" />
       </div>
       <h1 class="text-xl font-semibold text-slate-100">Sign up</h1>
@@ -115,7 +114,9 @@
     <p class="mb-5 text-sm text-muted-200">Create an account to start using NestChat.</p>
 
     {#if error}
-      <p class="mb-4 rounded-xl border border-red-500/40 bg-red-500/10 px-3 py-2 text-xs text-red-300">
+      <p
+        class="mb-4 rounded-xl border border-red-500/40 bg-red-500/10 px-3 py-2 text-xs text-red-300"
+      >
         {error}
       </p>
     {/if}
@@ -172,9 +173,7 @@
       <li class={requirementClass(hasLower)}>• At least one lowercase letter (a-z)</li>
       <li class={requirementClass(hasUpper)}>• At least one uppercase letter (A-Z)</li>
       <li class={requirementClass(hasDigit)}>• At least one digit (0-9)</li>
-      <li class={requirementClass(hasSpecial)}>
-        • At least one special character (e.g. !@#$%)
-      </li>
+      <li class={requirementClass(hasSpecial)}>• At least one special character (e.g. !@#$%)</li>
     </ul>
 
     <button

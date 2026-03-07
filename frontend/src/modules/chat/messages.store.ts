@@ -83,7 +83,8 @@ function mapApiMessages(channelUuid: string, items: MessageReadDto[]): Message[]
       uuid: item.uuid,
       channel_uuid: item.channelUuid ?? item.channel_uuid ?? channelUuid,
       content: item.content,
-      author: item.authorProfileDisplayName ?? item.author_profile_display_name ?? String(item.author),
+      author:
+        item.authorProfileDisplayName ?? item.author_profile_display_name ?? String(item.author),
       author_uuid: String(item.author),
       is_deleted: Boolean(item.isDeleted ?? item.is_deleted ?? false),
       is_edited: Boolean(item.isEdited ?? item.is_edited ?? false),
@@ -162,7 +163,7 @@ function resolveMessageStateAfterAppend(channelUuid: string, messages: Message[]
     hasMoreOlder: previousState.hasMoreOlder || previousState.wasOlderTrimmed,
     nextBefore:
       previousState.hasMoreOlder || previousState.wasOlderTrimmed
-        ? oldestCursor ?? previousState.nextBefore
+        ? (oldestCursor ?? previousState.nextBefore)
         : previousState.nextBefore,
     hasMoreNewer: hasPending ? true : previousState.hasMoreNewer,
     nextAfter: newestCursor ?? previousState.nextAfter,
@@ -334,17 +335,17 @@ function updateChannelStateAfterFetch(
     hasMoreNewer,
     nextBefore: hasMoreOlder
       ? wasOlderTrimmed
-        ? oldestEdgeCursor ?? responseMeta.nextBefore
+        ? (oldestEdgeCursor ?? responseMeta.nextBefore)
         : responseMeta.hasMoreOlder
           ? responseMeta.nextBefore
-          : oldestEdgeCursor ?? responseMeta.nextBefore
+          : (oldestEdgeCursor ?? responseMeta.nextBefore)
       : null,
     nextAfter: hasMoreNewer
       ? wasNewerTrimmed
-        ? newestEdgeCursor ?? responseMeta.nextAfter
+        ? (newestEdgeCursor ?? responseMeta.nextAfter)
         : responseMeta.hasMoreNewer
           ? responseMeta.nextAfter
-          : newestEdgeCursor ?? responseMeta.nextAfter
+          : (newestEdgeCursor ?? responseMeta.nextAfter)
       : null,
     wasOlderTrimmed,
     wasNewerTrimmed,
@@ -580,8 +581,7 @@ export async function fetchChannelReadState(channelUuid: string): Promise<void> 
     last_read_message_uuid?: string | null;
   };
   const unread = Number(payload.unreadCount ?? payload.unread_count ?? 0);
-  const lastReadMessageUuid =
-    payload.lastReadMessageUuid ?? payload.last_read_message_uuid ?? null;
+  const lastReadMessageUuid = payload.lastReadMessageUuid ?? payload.last_read_message_uuid ?? null;
   setUnreadCount(channelUuid, unread);
   setLastReadMessageUuid(channelUuid, lastReadMessageUuid);
 }

@@ -3,7 +3,10 @@
   import { ArrowRight, UserRound } from 'lucide-svelte';
   import { loginWithPassword } from '../../lib/auth';
 
-  const dispatch = createEventDispatcher<{ authenticated: undefined; switchToRegister: undefined }>();
+  const dispatch = createEventDispatcher<{
+    authenticated: undefined;
+    switchToRegister: undefined;
+  }>();
 
   let email = '';
   let password = '';
@@ -30,18 +33,16 @@
 
     dispatch('authenticated');
   }
-
 </script>
 
 <div class="app-shell flex items-center justify-center px-4">
   <div class="ambient-blob left-[-14%] top-[-10%] h-[460px] w-[460px] bg-accent-500/20"></div>
   <div class="ambient-blob right-[-10%] top-[10%] h-[420px] w-[420px] bg-indigo-500/20"></div>
-  <form
-    class="glass-panel w-full max-w-sm rounded-[1.1rem] p-6"
-    on:submit|preventDefault={submit}
-  >
+  <form class="glass-panel w-full max-w-sm rounded-[1.1rem] p-6" on:submit|preventDefault={submit}>
     <div class="mb-4 flex items-center gap-2">
-      <div class="flex h-8 w-8 items-center justify-center rounded-lg bg-accent-500/20 text-accent-300">
+      <div
+        class="flex h-8 w-8 items-center justify-center rounded-lg bg-accent-500/20 text-accent-300"
+      >
         <UserRound class="h-4 w-4" />
       </div>
       <h1 class="text-xl font-semibold text-slate-100">Sign in</h1>
@@ -49,7 +50,9 @@
     <p class="mb-5 text-sm text-muted-200">Sign in to continue to NestChat.</p>
 
     {#if error}
-      <p class="mb-4 rounded-xl border border-red-500/40 bg-red-500/10 px-3 py-2 text-xs text-red-300">
+      <p
+        class="mb-4 rounded-xl border border-red-500/40 bg-red-500/10 px-3 py-2 text-xs text-red-300"
+      >
         {error}
       </p>
     {/if}

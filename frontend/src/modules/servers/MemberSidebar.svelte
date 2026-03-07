@@ -1,10 +1,6 @@
 <script lang="ts">
   import { activeServer } from '../../lib/stores/ui';
-  import {
-    ensureServerMembers,
-    membersByServer,
-    membersQueryStateByServer,
-  } from './members.store';
+  import { ensureServerMembers, membersByServer, membersQueryStateByServer } from './members.store';
 
   $: currentServerUuid = $activeServer?.uuid ?? null;
   $: currentGroups = currentServerUuid ? ($membersByServer[currentServerUuid] ?? []) : [];
@@ -12,11 +8,7 @@
   $: totalMembers = currentGroups.reduce((total, group) => total + group.members.length, 0);
 
   function getInitials(displayName: string): string {
-    const parts = displayName
-      .trim()
-      .split(/\s+/)
-      .filter(Boolean)
-      .slice(0, 2);
+    const parts = displayName.trim().split(/\s+/).filter(Boolean).slice(0, 2);
     if (parts.length === 0) {
       return '?';
     }
@@ -77,7 +69,9 @@
             </p>
             <div class="space-y-1.5">
               {#each group.members as member (member.uuid)}
-                <div class="flex items-center gap-2 rounded-xl px-2 py-1.5 transition hover:bg-white/5">
+                <div
+                  class="flex items-center gap-2 rounded-xl px-2 py-1.5 transition hover:bg-white/5"
+                >
                   {#if member.avatar}
                     <img
                       src={member.avatar}
@@ -85,12 +79,16 @@
                       class="h-8 w-8 rounded-lg object-cover"
                     />
                   {:else}
-                    <div class="flex h-8 w-8 items-center justify-center rounded-lg bg-surface-800 text-[11px] font-semibold text-muted-200">
+                    <div
+                      class="flex h-8 w-8 items-center justify-center rounded-lg bg-surface-800 text-[11px] font-semibold text-muted-200"
+                    >
                       {getInitials(member.displayName)}
                     </div>
                   {/if}
                   <div class="min-w-0 flex-1">
-                    <p class="truncate text-sm font-semibold text-slate-100">{member.displayName}</p>
+                    <p class="truncate text-sm font-semibold text-slate-100">
+                      {member.displayName}
+                    </p>
                     {#if member.customStatus}
                       <p class="truncate text-[10px] text-muted-400">{member.customStatus}</p>
                     {/if}

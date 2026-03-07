@@ -24,7 +24,8 @@
   body {
     font-family: 'Public Sans', 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
     @apply bg-surface-950 text-slate-100 antialiased;
-    background-image: radial-gradient(circle at 18% 18%, rgba(236, 91, 19, 0.14), transparent 38%),
+    background-image:
+      radial-gradient(circle at 18% 18%, rgba(236, 91, 19, 0.14), transparent 38%),
       radial-gradient(circle at 84% 8%, rgba(78, 122, 255, 0.18), transparent 44%),
       linear-gradient(135deg, #090b13 0%, #0d1020 45%, #090b13 100%);
     background-attachment: fixed;

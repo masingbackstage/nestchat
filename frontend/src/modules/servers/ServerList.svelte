@@ -53,7 +53,9 @@
       >
         <span
           class={`absolute -left-2 top-1/2 h-2 w-1 -translate-y-1/2 rounded-r-full bg-white transition-all ${
-            $activeServer?.uuid === server.uuid ? 'opacity-100' : 'opacity-0 group-hover:h-4 group-hover:opacity-80'
+            $activeServer?.uuid === server.uuid
+              ? 'opacity-100'
+              : 'opacity-0 group-hover:h-4 group-hover:opacity-80'
           }`}
         ></span>
         {server.name.slice(0, 2).toUpperCase()}

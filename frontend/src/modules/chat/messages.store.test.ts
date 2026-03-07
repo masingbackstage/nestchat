@@ -120,7 +120,9 @@ function createFetchMock(dataset: ApiMessage[]): ReturnType<typeof vi.fn> {
       pageItems = rows.slice(0, limit);
       const first = pageItems[0];
       hasMoreOlder = first
-        ? dataset.some((item) => compareByCursor(item, { createdAt: first.createdAt, uuid: first.uuid }) < 0)
+        ? dataset.some(
+            (item) => compareByCursor(item, { createdAt: first.createdAt, uuid: first.uuid }) < 0,
+          )
         : false;
     } else {
       const rowsDesc = [...filtered].reverse().slice(0, limit + 1);
@@ -129,7 +131,9 @@ function createFetchMock(dataset: ApiMessage[]): ReturnType<typeof vi.fn> {
       const last = pageItems[pageItems.length - 1];
       hasMoreNewer =
         last !== undefined
-          ? dataset.some((item) => compareByCursor(item, { createdAt: last.createdAt, uuid: last.uuid }) > 0)
+          ? dataset.some(
+              (item) => compareByCursor(item, { createdAt: last.createdAt, uuid: last.uuid }) > 0,
+            )
           : false;
     }
 

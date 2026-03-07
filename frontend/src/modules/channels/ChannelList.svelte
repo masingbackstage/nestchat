@@ -78,10 +78,7 @@
   }
 </script>
 
-<nav
-  class="glass-panel w-[280px] shrink-0 rounded-panel"
-  aria-label="Channels"
->
+<nav class="glass-panel w-[280px] shrink-0 rounded-panel" aria-label="Channels">
   {#if $activeServer}
     <header class="flex h-16 items-center justify-between border-b border-white/10 px-4">
       <span class="truncate text-lg font-semibold text-slate-100">{$activeServer.name}</span>
@@ -102,7 +99,9 @@
 
     <div class="app-scrollbar flex min-h-0 flex-1 flex-col gap-5 overflow-auto px-3 py-3">
       <section>
-        <h3 class="mb-1.5 px-2 text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-500">
+        <h3
+          class="mb-1.5 px-2 text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-500"
+        >
           Text channels
         </h3>
         {#each $activeServer.channels.filter((c) => !isVoiceChannel(c)) as channel}
@@ -129,7 +128,9 @@
       </section>
 
       <section>
-        <h3 class="mb-1.5 px-2 text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-500">
+        <h3
+          class="mb-1.5 px-2 text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-500"
+        >
           Voice channels
         </h3>
         {#each $activeServer.channels.filter((c) => isVoiceChannel(c)) as channel}

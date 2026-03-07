@@ -124,7 +124,9 @@
         {/if}
 
         {#if isReactionPickerOpen}
-          <div class="absolute right-0 top-full z-20 mt-1 flex items-center gap-1 rounded-lg border border-white/15 bg-surface-900 p-1 shadow-lg">
+          <div
+            class="absolute right-0 top-full z-20 mt-1 flex items-center gap-1 rounded-lg border border-white/15 bg-surface-900 p-1 shadow-lg"
+          >
             {#each REACTION_EMOJIS as emoji (emoji)}
               <button
                 type="button"
@@ -171,7 +173,9 @@
       </div>
     </div>
   {:else}
-    <p class="whitespace-pre-wrap break-words text-sm leading-relaxed text-slate-200">{message.content}</p>
+    <p class="whitespace-pre-wrap break-words text-sm leading-relaxed text-slate-200">
+      {message.content}
+    </p>
     <div class="mt-2 flex flex-wrap items-center gap-1.5">
       {#each message.reactions ?? [] as reaction (reaction.emoji)}
         <button

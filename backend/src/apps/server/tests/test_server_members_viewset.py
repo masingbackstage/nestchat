@@ -13,7 +13,9 @@ def pick(payload, camel_key, snake_key):
 def test_server_members_returns_grouped_members_for_owner():
     owner = CustomUser.objects.create_user(email="owner-members@example.com", password="pw")
     member = CustomUser.objects.create_user(email="member-members@example.com", password="pw")
-    no_role_member = CustomUser.objects.create_user(email="plain-members@example.com", password="pw")
+    no_role_member = CustomUser.objects.create_user(
+        email="plain-members@example.com", password="pw"
+    )
     server = Server.objects.create(name="Nest", owner=owner)
     member_link = ServerMember.objects.create(server=server, user=member)
     ServerMember.objects.create(server=server, user=no_role_member)
@@ -51,10 +53,14 @@ def test_server_members_returns_grouped_members_for_owner():
     assert pick(member_payload, "customStatus", "custom_status") == "Reviewing PRs"
     assert [role["name"] for role in member_payload["roles"]] == ["Alpha", "Beta"]
 
-    owner_payload = next(item for item in offline_group["members"] if str(item["uuid"]) == str(owner.uuid))
+    owner_payload = next(
+        item for item in offline_group["members"] if str(item["uuid"]) == str(owner.uuid)
+    )
     assert pick(owner_payload, "displayName", "display_name") == "Owner Name"
 
-    plain_payload = next(item for item in online_group["members"] if str(item["uuid"]) == str(no_role_member.uuid))
+    plain_payload = next(
+        item for item in online_group["members"] if str(item["uuid"]) == str(no_role_member.uuid)
+    )
     assert pick(plain_payload, "displayName", "display_name") == "plain-members"
 
     all_member_uuids = [

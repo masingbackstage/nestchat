@@ -92,10 +92,7 @@ describe('auth session flow', () => {
       refresh_token: 'old-refresh',
     });
 
-    vi.stubGlobal(
-      'fetch',
-      vi.fn().mockRejectedValueOnce(new Error('network error')),
-    );
+    vi.stubGlobal('fetch', vi.fn().mockRejectedValueOnce(new Error('network error')));
 
     const { logoutCurrentSession } = await import('./auth');
     const result = await logoutCurrentSession();
