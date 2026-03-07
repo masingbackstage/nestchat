@@ -1,6 +1,10 @@
 from rest_framework import serializers
 
-from src.apps.chat.serializers import ReceiveMessageSerializer, UpdateMessageSerializer
+from src.apps.chat.serializers import (
+    ReceiveMessageSerializer,
+    ToggleReactionSerializer,
+    UpdateMessageSerializer,
+)
 
 from .enums import ChatAction, ModuleType
 
@@ -11,6 +15,17 @@ class JoinChannelPayloadSerializer(serializers.Serializer):
 
 class MessageUuidPayloadSerializer(serializers.Serializer):
     message_uuid = serializers.UUIDField()
+
+
+class ToggleReactionPayloadSerializer(serializers.Serializer):
+    message_uuid = serializers.UUIDField()
+    emoji = serializers.CharField(max_length=16)
+
+    def validate(self, attrs):
+        emoji_serializer = ToggleReactionSerializer(data={"emoji": attrs.get("emoji")})
+        emoji_serializer.is_valid(raise_exception=True)
+        attrs["emoji"] = emoji_serializer.validated_data["emoji"]
+        return attrs
 
 
 class GatewayRequestSerializer(serializers.Serializer):
@@ -38,13 +53,17 @@ class GatewayRequestSerializer(serializers.Serializer):
                     raise serializers.ValidationError({"payload": payload_serializer.errors})
             elif action == ChatAction.JOIN_CHANNEL:
                 channel_uuid = payload.get("channel_uuid")
-                payload_serializer = JoinChannelPayloadSerializer(data={"channel_uuid": channel_uuid})
+                payload_serializer = JoinChannelPayloadSerializer(
+                    data={"channel_uuid": channel_uuid}
+                )
                 if payload_serializer.is_valid():
                     data["payload"] = payload_serializer.validated_data
                 else:
                     raise serializers.ValidationError({"payload": payload_serializer.errors})
             elif action == ChatAction.EDIT_MESSAGE:
-                payload_serializer = UpdateMessageSerializer(data={"content": payload.get("content")})
+                payload_serializer = UpdateMessageSerializer(
+                    data={"content": payload.get("content")}
+                )
                 if payload_serializer.is_valid():
                     message_uuid_serializer = MessageUuidPayloadSerializer(
                         data={"message_uuid": payload.get("message_uuid")}
@@ -62,6 +81,12 @@ class GatewayRequestSerializer(serializers.Serializer):
                     raise serializers.ValidationError({"payload": payload_serializer.errors})
             elif action == ChatAction.DELETE_MESSAGE:
                 payload_serializer = MessageUuidPayloadSerializer(data=payload)
+                if payload_serializer.is_valid():
+                    data["payload"] = payload_serializer.validated_data
+                else:
+                    raise serializers.ValidationError({"payload": payload_serializer.errors})
+            elif action == ChatAction.TOGGLE_REACTION:
+                payload_serializer = ToggleReactionPayloadSerializer(data=payload)
                 if payload_serializer.is_valid():
                     data["payload"] = payload_serializer.validated_data
                 else:

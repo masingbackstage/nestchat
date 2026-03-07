@@ -146,6 +146,12 @@ import ToastViewport from './modules/shared/ToastViewport.svelte';
       isEdited?: boolean;
       edited_at?: string | null;
       editedAt?: string | null;
+      reactions?: Array<{
+        emoji: string;
+        count: number;
+        reacted_by_me?: boolean;
+        reactedByMe?: boolean;
+      }>;
       updated_at?: string;
       updatedAt?: string;
       created_at?: string;
@@ -154,6 +160,11 @@ import ToastViewport from './modules/shared/ToastViewport.svelte';
       clientId?: string;
     };
     const channelUuid = payload.channel_id ?? payload.channel_uuid ?? payload.channelUuid;
+    const mappedReactions = (payload.reactions ?? []).map((reaction) => ({
+      emoji: reaction.emoji,
+      count: Number(reaction.count ?? 0),
+      reacted_by_me: Boolean(reaction.reactedByMe ?? reaction.reacted_by_me ?? false),
+    }));
 
     if (actionName === 'new_message') {
       if (!channelUuid) {
@@ -172,6 +183,7 @@ import ToastViewport from './modules/shared/ToastViewport.svelte';
         is_deleted: Boolean(payload.isDeleted ?? payload.is_deleted ?? false),
         is_edited: Boolean(payload.isEdited ?? payload.is_edited ?? false),
         edited_at: payload.editedAt ?? payload.edited_at ?? null,
+        reactions: mappedReactions,
         created_at: payload.createdAt ?? payload.created_at ?? new Date().toISOString(),
         updated_at: payload.updatedAt ?? payload.updated_at,
         client_id: payload.client_id ?? payload.clientId,
@@ -184,7 +196,12 @@ import ToastViewport from './modules/shared/ToastViewport.svelte';
       return;
     }
 
-    if ((actionName === 'message_updated' || actionName === 'message_deleted') && channelUuid) {
+    if (
+      (actionName === 'message_updated' ||
+        actionName === 'message_deleted' ||
+        actionName === 'message_reactions_updated') &&
+      channelUuid
+    ) {
       const message: Message = {
         uuid: payload.uuid ?? payload.id ?? '',
         channel_uuid: channelUuid,
@@ -197,6 +214,7 @@ import ToastViewport from './modules/shared/ToastViewport.svelte';
         is_deleted: Boolean(payload.isDeleted ?? payload.is_deleted ?? false),
         is_edited: Boolean(payload.isEdited ?? payload.is_edited ?? false),
         edited_at: payload.editedAt ?? payload.edited_at ?? null,
+        reactions: mappedReactions,
         created_at: payload.createdAt ?? payload.created_at,
         updated_at: payload.updatedAt ?? payload.updated_at,
       };

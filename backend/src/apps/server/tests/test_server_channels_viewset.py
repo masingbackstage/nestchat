@@ -115,7 +115,9 @@ def test_allowed_roles_must_belong_to_server():
     owner = CustomUser.objects.create_user(email="owner-roles@example.com", password="pw")
     server = Server.objects.create(name="Nest", owner=owner)
 
-    other_owner = CustomUser.objects.create_user(email="owner-other-server@example.com", password="pw")
+    other_owner = CustomUser.objects.create_user(
+        email="owner-other-server@example.com", password="pw"
+    )
     other_server = Server.objects.create(name="Other", owner=other_owner)
     foreign_role = Role.objects.create(server=other_server, name="foreign")
 

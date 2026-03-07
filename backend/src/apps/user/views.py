@@ -1,5 +1,4 @@
-from rest_framework import permissions, status
-from rest_framework import serializers
+from rest_framework import permissions, serializers, status
 from rest_framework.response import Response
 from rest_framework.views import APIView
 from rest_framework_simplejwt.token_blacklist.models import BlacklistedToken, OutstandingToken
@@ -18,7 +17,9 @@ class LogoutAllSessionsAPIView(APIView):
         for token in tokens:
             BlacklistedToken.objects.get_or_create(token=token)
 
-        return Response({"detail": "All refresh tokens have been revoked."}, status=status.HTTP_200_OK)
+        return Response(
+            {"detail": "All refresh tokens have been revoked."}, status=status.HTTP_200_OK
+        )
 
 
 class LogoutSessionAPIView(APIView):
@@ -33,9 +34,13 @@ class LogoutSessionAPIView(APIView):
         try:
             token = RefreshToken(refresh_token)
             if str(token.get("user_uuid")) != str(request.user.uuid):
-                return Response({"detail": "Invalid refresh token."}, status=status.HTTP_400_BAD_REQUEST)
+                return Response(
+                    {"detail": "Invalid refresh token."}, status=status.HTTP_400_BAD_REQUEST
+                )
             token.blacklist()
         except TokenError:
-            return Response({"detail": "Invalid refresh token."}, status=status.HTTP_400_BAD_REQUEST)
+            return Response(
+                {"detail": "Invalid refresh token."}, status=status.HTTP_400_BAD_REQUEST
+            )
 
         return Response({"detail": "Session logged out."}, status=status.HTTP_200_OK)

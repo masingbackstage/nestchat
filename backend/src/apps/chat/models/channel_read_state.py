@@ -12,9 +12,7 @@ class ChannelReadState(models.Model):
     user = models.ForeignKey(
         to=settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="channel_read_states"
     )
-    channel = models.ForeignKey(
-        to=Channel, on_delete=models.CASCADE, related_name="read_states"
-    )
+    channel = models.ForeignKey(to=Channel, on_delete=models.CASCADE, related_name="read_states")
     last_read_message = models.ForeignKey(
         to=Message,
         on_delete=models.SET_NULL,
@@ -26,7 +24,9 @@ class ChannelReadState(models.Model):
 
     class Meta:
         constraints = [
-            models.UniqueConstraint(fields=["user", "channel"], name="chat_read_state_unique_user_channel")
+            models.UniqueConstraint(
+                fields=["user", "channel"], name="chat_read_state_unique_user_channel"
+            )
         ]
 
     def __str__(self):

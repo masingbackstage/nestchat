@@ -209,6 +209,25 @@ export function sendDeleteMessage(messageUuid: string): boolean {
   return true;
 }
 
+export function sendToggleReaction(messageUuid: string, emoji: string): boolean {
+  if (!socket || socket.readyState !== WebSocket.OPEN) {
+    return false;
+  }
+
+  socket.send(
+    JSON.stringify({
+      module: 'CHAT',
+      action: 'TOGGLE_REACTION',
+      payload: {
+        message_uuid: messageUuid,
+        emoji,
+      },
+    }),
+  );
+
+  return true;
+}
+
 export function joinGatewayChannel(channelUuid: string): boolean {
   pendingChannelJoins.add(channelUuid);
   const isOpen = Boolean(socket && socket.readyState === WebSocket.OPEN);

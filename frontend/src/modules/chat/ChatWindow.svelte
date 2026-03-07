@@ -1,7 +1,7 @@
 <script lang="ts">
   import { tick } from 'svelte';
   import { getCurrentUserUuid } from '../../lib/auth';
-  import { sendDeleteMessage, sendEditMessage } from '../../lib/socket';
+  import { sendDeleteMessage, sendEditMessage, sendToggleReaction } from '../../lib/socket';
   import { pushToast } from '../../lib/stores/toast';
   import { activeChannel, activeServer } from '../../lib/stores/ui';
   import {
@@ -228,6 +228,16 @@
     markBusy(messageUuid, false);
   }
 
+  function handleToggleReaction(
+    event: CustomEvent<{ messageUuid: string; emoji: string }>,
+  ): void {
+    const { messageUuid, emoji } = event.detail;
+    const sent = sendToggleReaction(messageUuid, emoji);
+    if (!sent) {
+      pushToast({ type: 'error', message: 'Brak połączenia z gateway.' });
+    }
+  }
+
   function handleDeleteMessage(event: CustomEvent<{ messageUuid: string }>): void {
     pendingDeleteMessageUuid = event.detail.messageUuid;
   }
@@ -321,6 +331,7 @@
             isBusy={isMessageBusy(message.uuid)}
             on:edit={handleEditMessage}
             on:delete={handleDeleteMessage}
+            on:toggleReaction={handleToggleReaction}
           />
         {/each}
       {/if}

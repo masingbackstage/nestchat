@@ -1,6 +1,13 @@
 from rest_framework import serializers
 
+from src.apps.chat.constants import ALLOWED_REACTION_EMOJIS
 from src.apps.chat.models import Message
+
+
+class MessageReactionSummarySerializer(serializers.Serializer):
+    emoji = serializers.CharField()
+    count = serializers.IntegerField(min_value=1)
+    reacted_by_me = serializers.BooleanField()
 
 
 class MessageReadSerializer(serializers.ModelSerializer):
@@ -8,6 +15,7 @@ class MessageReadSerializer(serializers.ModelSerializer):
     channel_uuid = serializers.ReadOnlyField(source="channel.uuid")
     is_edited = serializers.SerializerMethodField()
     edited_at = serializers.DateTimeField(read_only=True, allow_null=True)
+    reactions = serializers.SerializerMethodField()
 
     class Meta:
         model = Message
@@ -20,6 +28,7 @@ class MessageReadSerializer(serializers.ModelSerializer):
             "is_deleted",
             "is_edited",
             "edited_at",
+            "reactions",
             "created_at",
             "updated_at",
         ]
@@ -33,6 +42,26 @@ class MessageReadSerializer(serializers.ModelSerializer):
         if instance.is_deleted:
             data["content"] = ""
         return data
+
+    def get_reactions(self, obj):
+        user = self.context.get("user") or getattr(self.context.get("request"), "user", None)
+        user_id = getattr(user, "pk", None)
+        reactions = list(obj.reactions.all())
+        if not reactions:
+            return []
+
+        grouped: dict[str, dict[str, object]] = {}
+        for reaction in reactions:
+            bucket = grouped.setdefault(
+                reaction.emoji,
+                {"emoji": reaction.emoji, "count": 0, "reacted_by_me": False},
+            )
+            bucket["count"] = int(bucket["count"]) + 1
+            if user_id and reaction.user_id == user_id:
+                bucket["reacted_by_me"] = True
+
+        sorted_items = [grouped[key] for key in sorted(grouped.keys())]
+        return MessageReactionSummarySerializer(sorted_items, many=True).data
 
 
 class ReceiveMessageSerializer(serializers.Serializer):
@@ -59,6 +88,15 @@ class UpdateMessageSerializer(serializers.Serializer):
             "max_length": "Message is too long, max 4000 symbols",
         },
     )
+
+
+class ToggleReactionSerializer(serializers.Serializer):
+    emoji = serializers.CharField(max_length=16)
+
+    def validate_emoji(self, value):
+        if value not in ALLOWED_REACTION_EMOJIS:
+            raise serializers.ValidationError("Unsupported emoji.")
+        return value
 
 
 class ChannelReadStateSerializer(serializers.Serializer):

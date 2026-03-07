@@ -24,6 +24,13 @@ export type CreateChannelRequest = {
   allowed_roles: string[];
 };
 
+export type MessageReaction = {
+  emoji: string;
+  count: number;
+  reacted_by_me?: boolean;
+  reactedByMe?: boolean;
+};
+
 export type Message = {
   uuid: string;
   channel_uuid: string;
@@ -35,6 +42,7 @@ export type Message = {
   is_deleted?: boolean;
   is_edited?: boolean;
   edited_at?: string | null;
+  reactions?: MessageReaction[];
   client_id?: string;
   pending?: boolean;
   failed?: boolean;
@@ -54,6 +62,7 @@ export type MessageReadDto = {
   is_edited?: boolean;
   editedAt?: string | null;
   edited_at?: string | null;
+  reactions?: MessageReaction[];
   createdAt?: string;
   created_at?: string;
   updatedAt?: string;

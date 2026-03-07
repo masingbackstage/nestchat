@@ -1,19 +1,22 @@
 import uuid
 
+from django.db import IntegrityError
 from django.db.models import Q
 from django.utils import timezone
 from django.utils.dateparse import parse_datetime
 from drf_spectacular.types import OpenApiTypes
 from drf_spectacular.utils import OpenApiParameter, OpenApiResponse, extend_schema
 from rest_framework import exceptions, mixins, permissions, status, viewsets
-from rest_framework.views import APIView
+from rest_framework.decorators import action
 from rest_framework.response import Response
+from rest_framework.views import APIView
 
-from .models import ChannelReadState, Message
+from .models import ChannelReadState, Message, MessageReaction
 from .serializers import (
     ChannelMarkReadSerializer,
     ChannelReadStateSerializer,
     MessageReadSerializer,
+    ToggleReactionSerializer,
     UpdateMessageSerializer,
 )
 from .services import (
@@ -38,7 +41,9 @@ class MessageViewSet(
 
     def get_throttles(self):
         self.throttle_scope = (
-            "chat_writes" if self.request.method in {"PATCH", "PUT", "DELETE"} else "chat_reads"
+            "chat_writes"
+            if self.request.method in {"PATCH", "PUT", "DELETE", "POST"}
+            else "chat_reads"
         )
         return super().get_throttles()
 
@@ -95,6 +100,7 @@ class MessageViewSet(
             query = (
                 Message.objects.filter(channel=channel)
                 .select_related("author", "author__profile")
+                .prefetch_related("reactions")
                 .order_by("created_at", "uuid")
             )
             query = self.apply_after_cursor(query, after_cursor)
@@ -110,6 +116,7 @@ class MessageViewSet(
             query = (
                 Message.objects.filter(channel=channel)
                 .select_related("author", "author__profile")
+                .prefetch_related("reactions")
                 .order_by("-created_at", "-uuid")
             )
             if before_cursor:
@@ -227,7 +234,10 @@ class MessageViewSet(
         message.content = serializer.validated_data["content"]
         message.edited_at = timezone.now()
         message.save(update_fields=["content", "edited_at", "updated_at"])
-        return Response(MessageReadSerializer(message).data, status=status.HTTP_200_OK)
+        return Response(
+            MessageReadSerializer(message, context=self.get_serializer_context()).data,
+            status=status.HTTP_200_OK,
+        )
 
     @extend_schema(request=None, responses={200: MessageReadSerializer})
     def destroy(self, request, *args, **kwargs):
@@ -237,9 +247,69 @@ class MessageViewSet(
             message.deleted_at = timezone.now()
             message.deleted_by = request.user
             message.content = ""
-            message.save(update_fields=["is_deleted", "deleted_at", "deleted_by", "content", "updated_at"])
+            message.save(
+                update_fields=["is_deleted", "deleted_at", "deleted_by", "content", "updated_at"]
+            )
 
-        return Response(MessageReadSerializer(message).data, status=status.HTTP_200_OK)
+        return Response(
+            MessageReadSerializer(message, context=self.get_serializer_context()).data,
+            status=status.HTTP_200_OK,
+        )
+
+    @action(detail=True, methods=["post"], url_path="reactions/toggle")
+    def toggle_reaction(self, request, *args, **kwargs):
+        message = self.get_message_for_reaction_or_raise()
+        if message.is_deleted:
+            raise exceptions.ValidationError({"detail": "Cannot react to deleted message."})
+
+        serializer = ToggleReactionSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        emoji = serializer.validated_data["emoji"]
+
+        try:
+            reaction, created = MessageReaction.objects.get_or_create(
+                message=message,
+                user=request.user,
+                emoji=emoji,
+            )
+        except IntegrityError:
+            reaction = MessageReaction.objects.filter(
+                message=message, user=request.user, emoji=emoji
+            ).first()
+            created = reaction is not None
+
+        if not created and reaction is not None:
+            reaction.delete()
+
+        message = (
+            Message.objects.select_related("author", "author__profile")
+            .prefetch_related("reactions")
+            .get(uuid=message.uuid)
+        )
+        return Response(
+            MessageReadSerializer(message, context=self.get_serializer_context()).data,
+            status=status.HTTP_200_OK,
+        )
+
+    def get_message_for_reaction_or_raise(self):
+        message_uuid = self.kwargs.get(self.lookup_field)
+        message = (
+            Message.objects.select_related("channel__server")
+            .prefetch_related("channel__allowed_roles")
+            .filter(uuid=message_uuid)
+            .first()
+        )
+        if message is None:
+            raise exceptions.NotFound("Message not found.")
+
+        try:
+            get_channel_for_user_or_raise(self.request.user, message.channel.uuid)
+        except ChannelNotFound as exc:
+            raise exceptions.NotFound(exc.detail)
+        except ChannelPermissionDenied as exc:
+            raise exceptions.PermissionDenied(exc.detail)
+
+        return message
 
     def get_object(self):
         message_uuid = self.kwargs.get(self.lookup_field)
@@ -331,10 +401,14 @@ class ChannelReadStateAPIView(APIView):
             unread_count = Message.objects.filter(channel=channel).count()
             last_read_message_uuid = None
         else:
-            unread_count = Message.objects.filter(channel=channel).filter(
-                Q(created_at__gt=last_read_message.created_at)
-                | Q(created_at=last_read_message.created_at, uuid__gt=last_read_message.uuid)
-            ).count()
+            unread_count = (
+                Message.objects.filter(channel=channel)
+                .filter(
+                    Q(created_at__gt=last_read_message.created_at)
+                    | Q(created_at=last_read_message.created_at, uuid__gt=last_read_message.uuid)
+                )
+                .count()
+            )
             last_read_message_uuid = last_read_message.uuid
 
         return {

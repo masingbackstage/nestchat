@@ -2,13 +2,13 @@ import json
 import uuid
 from datetime import date, datetime
 
+from channels.db import database_sync_to_async
+from channels.generic.websocket import AsyncWebsocketConsumer
 from django.conf import settings
 from django.core.cache import cache
 from django.utils import timezone
-from channels.db import database_sync_to_async
-from channels.generic.websocket import AsyncWebsocketConsumer
 
-from src.apps.chat.models import Message
+from src.apps.chat.models import Message, MessageReaction
 from src.apps.chat.serializers import MessageReadSerializer
 from src.apps.chat.services import (
     ChannelNotFound,
@@ -54,9 +54,7 @@ class GatewayConsumer(AsyncWebsocketConsumer):
                     await self.channel_layer.group_discard(group, self.channel_name)
 
     async def receive(self, text_data):
-        if await self.is_rate_limited(
-            "receive", settings.GATEWAY_RECEIVE_RATE_LIMIT_PER_MINUTE
-        ):
+        if await self.is_rate_limited("receive", settings.GATEWAY_RECEIVE_RATE_LIMIT_PER_MINUTE):
             await self.gateway_send(
                 {
                     "module": "system",
@@ -294,6 +292,62 @@ class GatewayConsumer(AsyncWebsocketConsumer):
                     "payload": payload_data,
                 },
             )
+            return
+
+        if action == ChatAction.TOGGLE_REACTION:
+            message_uuid = payload["message_uuid"]
+            emoji = payload["emoji"]
+
+            try:
+                message = await self.get_allowed_message(message_uuid)
+            except MessageNotFound as exc:
+                await self.gateway_send(
+                    {
+                        "module": "system",
+                        "action": "error",
+                        "payload": {"code": exc.code, "detail": exc.detail},
+                    }
+                )
+                return
+            except MessagePermissionDenied as exc:
+                await self.gateway_send(
+                    {
+                        "module": "system",
+                        "action": "error",
+                        "payload": {"code": exc.code, "detail": exc.detail},
+                    }
+                )
+                return
+
+            if message.is_deleted:
+                await self.gateway_send(
+                    {
+                        "module": "system",
+                        "action": "error",
+                        "payload": {
+                            "code": "validation_error",
+                            "detail": "Cannot react to deleted message.",
+                        },
+                    }
+                )
+                return
+
+            message = await self.toggle_message_reaction(message.uuid, emoji)
+            payload_data = await self.serialize_message(message.uuid)
+            group_name = f"channel_{payload_data['channel_uuid']}"
+            if group_name not in self.joined_channel_groups:
+                await self.channel_layer.group_add(group_name, self.channel_name)
+                self.joined_channel_groups.add(group_name)
+
+            await self.channel_layer.group_send(
+                group_name,
+                {
+                    "type": "gateway_send_event",
+                    "module": ModuleType.CHAT.value,
+                    "action": "message_reactions_updated",
+                    "payload": payload_data,
+                },
+            )
 
     async def gateway_send_event(self, event):
         await self.gateway_send(
@@ -347,12 +401,25 @@ class GatewayConsumer(AsyncWebsocketConsumer):
         return message
 
     @database_sync_to_async
+    def toggle_message_reaction(self, message_uuid, emoji):
+        message = Message.objects.get(uuid=message_uuid)
+        reaction = MessageReaction.objects.filter(
+            message=message, user=self.user, emoji=emoji
+        ).first()
+        if reaction:
+            reaction.delete()
+        else:
+            MessageReaction.objects.create(message=message, user=self.user, emoji=emoji)
+        return message
+
+    @database_sync_to_async
     def serialize_message(self, message_uuid):
         message = (
             Message.objects.select_related("author", "author__profile", "channel")
+            .prefetch_related("reactions")
             .get(uuid=message_uuid)
         )
-        data = MessageReadSerializer(message).data
+        data = MessageReadSerializer(message, context={"user": self.user}).data
         for key, value in list(data.items()):
             if isinstance(value, uuid.UUID):
                 data[key] = str(value)

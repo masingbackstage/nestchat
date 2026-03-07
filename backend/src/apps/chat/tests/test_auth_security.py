@@ -93,7 +93,9 @@ def test_messages_endpoint_is_throttled_by_scope(monkeypatch):
     monkeypatch.setattr(MessageViewSet, "throttle_classes", [ScopedRateThrottle])
     monkeypatch.setattr(ScopedRateThrottle, "THROTTLE_RATES", {"chat_reads": "1/min"})
 
-    with override_settings(CACHES={"default": {"BACKEND": "django.core.cache.backends.locmem.LocMemCache"}}):
+    with override_settings(
+        CACHES={"default": {"BACKEND": "django.core.cache.backends.locmem.LocMemCache"}}
+    ):
         first = client.get("/api/chat/messages/", {"channel_uuid": str(channel.uuid)})
         second = client.get("/api/chat/messages/", {"channel_uuid": str(channel.uuid)})
 

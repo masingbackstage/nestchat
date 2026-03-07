@@ -88,6 +88,11 @@ function mapApiMessages(channelUuid: string, items: MessageReadDto[]): Message[]
       is_deleted: Boolean(item.isDeleted ?? item.is_deleted ?? false),
       is_edited: Boolean(item.isEdited ?? item.is_edited ?? false),
       edited_at: item.editedAt ?? item.edited_at ?? null,
+      reactions: (item.reactions ?? []).map((reaction) => ({
+        emoji: reaction.emoji,
+        count: Number(reaction.count ?? 0),
+        reacted_by_me: Boolean(reaction.reactedByMe ?? reaction.reacted_by_me ?? false),
+      })),
       created_at: item.createdAt ?? item.created_at,
       updated_at: item.updatedAt ?? item.updated_at,
     }))
@@ -727,6 +732,7 @@ export function addPendingMessage(channelUuid: string, content: string, clientId
     client_id: clientId,
     pending: true,
     failed: false,
+    reactions: [],
   };
 
   const merged = dedupeByUuid([...currentMessages, pendingMessage]);

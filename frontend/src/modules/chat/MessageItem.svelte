@@ -1,6 +1,6 @@
 <script lang="ts">
   import { createEventDispatcher } from 'svelte';
-  import { Pencil, Trash2 } from 'lucide-svelte';
+  import { Pencil, Plus, Trash2 } from 'lucide-svelte';
   import type { Message } from '../../types/gateway';
 
   export let message: Message;
@@ -10,10 +10,13 @@
   const dispatch = createEventDispatcher<{
     edit: { messageUuid: string; content: string };
     delete: { messageUuid: string };
+    toggleReaction: { messageUuid: string; emoji: string };
   }>();
+  const REACTION_EMOJIS = ['👍', '❤️', '😂', '😮', '😢', '😡', '🎉', '👀'];
 
   let isEditing = false;
   let draft = '';
+  let isReactionPickerOpen = false;
 
   $: formattedTime = message.created_at
     ? new Date(message.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
@@ -58,6 +61,11 @@
       return;
     }
     dispatch('delete', { messageUuid: message.uuid });
+  }
+
+  function toggleReaction(emoji: string): void {
+    dispatch('toggleReaction', { messageUuid: message.uuid, emoji });
+    isReactionPickerOpen = false;
   }
 </script>
 
@@ -132,5 +140,54 @@
     </div>
   {:else}
     <p class="whitespace-pre-wrap break-words text-sm text-slate-300">{message.content}</p>
+    <div class="relative mt-2 flex flex-wrap items-center gap-1.5">
+      {#each message.reactions ?? [] as reaction (reaction.emoji)}
+        <button
+          type="button"
+          class={`rounded-full border px-2 py-0.5 text-xs transition ${
+            reaction.reacted_by_me
+              ? 'border-emerald-500/40 bg-emerald-500/20 text-emerald-100'
+              : 'border-slate-700 bg-slate-800 text-slate-300 hover:border-slate-500'
+          }`}
+          on:click={() => toggleReaction(reaction.emoji)}
+          title={`Reakcja ${reaction.emoji}`}
+          disabled={isBusy || message.pending}
+        >
+          <span>{reaction.emoji}</span>
+          <span class="ml-1">{reaction.count}</span>
+        </button>
+      {/each}
+      <button
+        type="button"
+        class={`rounded-full border border-slate-700 bg-slate-800 p-1 text-slate-400 transition hover:border-slate-500 hover:text-slate-200 ${
+          isReactionPickerOpen
+            ? 'opacity-100'
+            : 'pointer-events-none opacity-0 group-hover:pointer-events-auto group-hover:opacity-100'
+        }`}
+        on:click={() => (isReactionPickerOpen = !isReactionPickerOpen)}
+        disabled={isBusy || message.pending}
+        aria-label="Dodaj reakcję"
+        title="Dodaj reakcję"
+      >
+        <Plus class="h-3.5 w-3.5" aria-hidden="true" />
+      </button>
+
+      {#if isReactionPickerOpen}
+        <div class="absolute left-0 top-full z-20 mt-1 flex items-center gap-1 rounded-lg border border-slate-700 bg-slate-900 p-1 shadow-lg">
+          {#each REACTION_EMOJIS as emoji (emoji)}
+            <button
+              type="button"
+              class="rounded px-1.5 py-1 text-base transition hover:bg-slate-700"
+              on:click={() => toggleReaction(emoji)}
+              title={emoji}
+              aria-label={`Reakcja ${emoji}`}
+              disabled={isBusy || message.pending}
+            >
+              {emoji}
+            </button>
+          {/each}
+        </div>
+      {/if}
+    </div>
   {/if}
 </article>

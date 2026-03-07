@@ -1,11 +1,11 @@
 import pytest
 
+from src.apps.chat.models import Message
 from src.apps.chat.services import (
     MessageNotFound,
     MessagePermissionDenied,
     get_message_for_user_or_raise,
 )
-from src.apps.chat.models import Message
 from src.apps.server.models import Channel, Server, ServerMember
 from src.apps.user.models import CustomUser
 

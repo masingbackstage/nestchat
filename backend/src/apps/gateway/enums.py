@@ -12,3 +12,4 @@ class ChatAction(TextChoices):
     JOIN_CHANNEL = ("JOIN_CHANNEL", "join_channel")
     EDIT_MESSAGE = ("EDIT_MESSAGE", "edit_message")
     DELETE_MESSAGE = ("DELETE_MESSAGE", "delete_message")
+    TOGGLE_REACTION = ("TOGGLE_REACTION", "toggle_reaction")

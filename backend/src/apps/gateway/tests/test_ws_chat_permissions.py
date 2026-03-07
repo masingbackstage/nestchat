@@ -337,3 +337,71 @@ def test_ws_delete_message_marks_message_deleted():
     assert event["payload"]["content"] == ""
     message.refresh_from_db()
     assert message.is_deleted is True
+
+
+@pytest.mark.django_db(transaction=True)
+@override_settings(CHANNEL_LAYERS={"default": {"BACKEND": "channels.layers.InMemoryChannelLayer"}})
+def test_ws_toggle_reaction_broadcasts_updated_snapshot():
+    owner = CustomUser.objects.create_user(email="owner-ws11@example.com", password="pw")
+    user = CustomUser.objects.create_user(email="member-ws11@example.com", password="pw")
+    server = Server.objects.create(name="WS Server 11", owner=owner)
+    ServerMember.objects.create(user=user, server=server)
+    channel = Channel.objects.create(server=server, name="general", is_public=True)
+    message = Message.objects.create(channel=channel, author=user, content="hello")
+
+    async def scenario():
+        communicator = WebsocketCommunicator(application, _ws_path_for_user(user))
+        connected, _ = await communicator.connect()
+        assert connected is True
+        await communicator.send_json_to(
+            {
+                "module": "CHAT",
+                "action": "TOGGLE_REACTION",
+                "payload": {"message_uuid": str(message.uuid), "emoji": "👍"},
+            }
+        )
+        event = await communicator.receive_json_from(timeout=1)
+        await communicator.disconnect()
+        return event
+
+    event = async_to_sync(scenario)()
+    assert str(event["module"]).lower() == "chat"
+    assert event["action"] == "message_reactions_updated"
+    assert event["payload"]["uuid"] == str(message.uuid)
+    reactions = event["payload"]["reactions"]
+    assert len(reactions) == 1
+    assert reactions[0]["emoji"] == "👍"
+    assert reactions[0]["count"] == 1
+    assert reactions[0]["reacted_by_me"] is True
+
+
+@pytest.mark.django_db(transaction=True)
+@override_settings(CHANNEL_LAYERS={"default": {"BACKEND": "channels.layers.InMemoryChannelLayer"}})
+def test_ws_toggle_reaction_denied_without_access():
+    owner = CustomUser.objects.create_user(email="owner-ws12@example.com", password="pw")
+    author = CustomUser.objects.create_user(email="author-ws12@example.com", password="pw")
+    outsider = CustomUser.objects.create_user(email="outsider-ws12@example.com", password="pw")
+    server = Server.objects.create(name="WS Server 12", owner=owner)
+    ServerMember.objects.create(user=author, server=server)
+    channel = Channel.objects.create(server=server, name="general", is_public=True)
+    message = Message.objects.create(channel=channel, author=author, content="hello")
+
+    async def scenario():
+        communicator = WebsocketCommunicator(application, _ws_path_for_user(outsider))
+        connected, _ = await communicator.connect()
+        assert connected is True
+        await communicator.send_json_to(
+            {
+                "module": "CHAT",
+                "action": "TOGGLE_REACTION",
+                "payload": {"message_uuid": str(message.uuid), "emoji": "👍"},
+            }
+        )
+        event = await communicator.receive_json_from(timeout=1)
+        await communicator.disconnect()
+        return event
+
+    event = async_to_sync(scenario)()
+    assert event["module"] == "system"
+    assert event["action"] == "error"
+    assert event["payload"]["code"] == "permission_denied"

@@ -1,7 +1,6 @@
 import pytest
 from rest_framework.test import APIClient
 
-
 REGISTRATION_URL = "/api/auth/registration/"
 WEAK_PASSWORD_ERROR = (
     "Password must be at least 10 characters long and include lowercase, uppercase, "
