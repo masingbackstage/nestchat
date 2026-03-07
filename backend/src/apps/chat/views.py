@@ -21,6 +21,7 @@ from .services import ChannelNotFound, ChannelPermissionDenied, get_channel_for_
 class MessageViewSet(viewsets.ReadOnlyModelViewSet):
     serializer_class = MessageReadSerializer
     permission_classes = [permissions.IsAuthenticated]
+    throttle_scope = "chat_reads"
 
     @extend_schema(
         parameters=[
@@ -198,6 +199,11 @@ class MessageViewSet(viewsets.ReadOnlyModelViewSet):
 
 class ChannelReadStateAPIView(APIView):
     permission_classes = [permissions.IsAuthenticated]
+    throttle_scope = "chat_reads"
+
+    def get_throttles(self):
+        self.throttle_scope = "chat_writes" if self.request.method == "POST" else "chat_reads"
+        return super().get_throttles()
 
     @extend_schema(
         parameters=[

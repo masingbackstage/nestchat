@@ -1,4 +1,5 @@
 import { get, writable } from 'svelte/store';
+import { authFetch } from '../../lib/auth';
 import type { Message, MessageReadDto, PaginatedMessagesResponse } from '../../types/gateway';
 
 type MessagesByChannel = Record<string, Message[]>;
@@ -50,15 +51,12 @@ export const messagesByChannel = writable<MessagesByChannel>({});
 export const chatConnectionStatus = writable<ConnectionStatus>('idle');
 export const channelQueryStateById = writable<Record<string, ChannelQueryState>>({});
 export const unreadCountByChannel = writable<Record<string, number>>({});
+export const lastReadMessageUuidByChannel = writable<Record<string, string | null>>({});
 
 const inFlightInitialByChannel: Record<string, Promise<void> | undefined> = {};
 const inFlightOlderByChannel: Record<string, Promise<void> | undefined> = {};
 const inFlightNewerByChannel: Record<string, Promise<void> | undefined> = {};
 const requestIdCounterByChannel: Record<string, number> = {};
-
-function getToken(): string | null {
-  return import.meta.env.VITE_API_TOKEN ?? localStorage.getItem('access_token');
-}
 
 function getBaseUrl(): string | null {
   return import.meta.env.VITE_API_URL ?? null;
@@ -188,7 +186,6 @@ async function fetchMessagesPage(
   },
 ): Promise<NormalizedPaginatedPayload> {
   const baseUrl = getBaseUrl();
-  const token = getToken();
 
   if (!baseUrl) {
     throw new Error('Brak VITE_API_URL.');
@@ -205,8 +202,7 @@ async function fetchMessagesPage(
     params.set('after', options.after);
   }
 
-  const headers: HeadersInit = token ? { Authorization: `Bearer ${token}` } : {};
-  const response = await fetch(`${baseUrl}/chat/messages/?${params.toString()}`, { headers });
+  const response = await authFetch(`${baseUrl}/chat/messages/?${params.toString()}`);
 
   if (!response.ok) {
     const errorBody = await response.text();
@@ -505,17 +501,21 @@ export function setUnreadCount(channelUuid: string, unreadCount: number): void {
   }));
 }
 
+function setLastReadMessageUuid(channelUuid: string, lastReadMessageUuid: string | null): void {
+  lastReadMessageUuidByChannel.update((current) => ({
+    ...current,
+    [channelUuid]: lastReadMessageUuid,
+  }));
+}
+
 export async function fetchChannelReadState(channelUuid: string): Promise<void> {
   const baseUrl = getBaseUrl();
-  const token = getToken();
-  if (!baseUrl || !token) {
+  if (!baseUrl) {
     return;
   }
 
   const params = new URLSearchParams({ channel_uuid: channelUuid });
-  const response = await fetch(`${baseUrl}/chat/read-state/?${params.toString()}`, {
-    headers: { Authorization: `Bearer ${token}` },
-  });
+  const response = await authFetch(`${baseUrl}/chat/read-state/?${params.toString()}`);
 
   if (!response.ok) {
     return;
@@ -524,9 +524,14 @@ export async function fetchChannelReadState(channelUuid: string): Promise<void> 
   const payload = (await response.json()) as {
     unreadCount?: number;
     unread_count?: number;
+    lastReadMessageUuid?: string | null;
+    last_read_message_uuid?: string | null;
   };
   const unread = Number(payload.unreadCount ?? payload.unread_count ?? 0);
+  const lastReadMessageUuid =
+    payload.lastReadMessageUuid ?? payload.last_read_message_uuid ?? null;
   setUnreadCount(channelUuid, unread);
+  setLastReadMessageUuid(channelUuid, lastReadMessageUuid);
 }
 
 export async function markChannelAsRead(
@@ -534,8 +539,7 @@ export async function markChannelAsRead(
   lastReadMessageUuid?: string,
 ): Promise<void> {
   const baseUrl = getBaseUrl();
-  const token = getToken();
-  if (!baseUrl || !token) {
+  if (!baseUrl) {
     return;
   }
 
@@ -544,10 +548,9 @@ export async function markChannelAsRead(
     body.last_read_message_uuid = lastReadMessageUuid;
   }
 
-  const response = await fetch(`${baseUrl}/chat/read-state/`, {
+  const response = await authFetch(`${baseUrl}/chat/read-state/`, {
     method: 'POST',
     headers: {
-      Authorization: `Bearer ${token}`,
       'Content-Type': 'application/json',
     },
     body: JSON.stringify(body),
@@ -556,7 +559,16 @@ export async function markChannelAsRead(
     return;
   }
 
+  const payload = (await response.json()) as {
+    lastReadMessageUuid?: string | null;
+    last_read_message_uuid?: string | null;
+  };
+
   setUnreadCount(channelUuid, 0);
+  setLastReadMessageUuid(
+    channelUuid,
+    payload.lastReadMessageUuid ?? payload.last_read_message_uuid ?? lastReadMessageUuid ?? null,
+  );
 }
 
 export function addMessage(message: Message): void {
@@ -627,4 +639,5 @@ export function clearMessagesForChannel(channelUuid: string): void {
     ...current,
     [channelUuid]: 0,
   }));
+  setLastReadMessageUuid(channelUuid, null);
 }

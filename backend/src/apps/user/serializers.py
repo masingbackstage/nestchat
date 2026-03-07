@@ -10,6 +10,14 @@ class CustomRegisterSerializer(RegisterSerializer):
 
     display_name = serializers.CharField(required=False, max_length=50)
 
+    def to_internal_value(self, data):
+        normalized = data.copy()
+        if "password_1" in normalized and "password1" not in normalized:
+            normalized["password1"] = normalized["password_1"]
+        if "password_2" in normalized and "password2" not in normalized:
+            normalized["password2"] = normalized["password_2"]
+        return super().to_internal_value(normalized)
+
     def get_cleaned_data(self):
         data = super().get_cleaned_data()
         data.pop("username", None)

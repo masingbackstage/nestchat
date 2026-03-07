@@ -5,9 +5,11 @@
     MAX_MESSAGES_PER_CHANNEL,
     channelQueryStateById,
     chatConnectionStatus,
+    lastReadMessageUuidByChannel,
     loadNewerMessages,
     loadOlderMessages,
     messagesByChannel,
+    unreadCountByChannel,
   } from './messages.store';
   import MessageItem from './MessageItem.svelte';
   import MessageInput from './MessageInput.svelte';
@@ -22,6 +24,15 @@
 
   $: currentMessages = $activeChannel ? ($messagesByChannel[$activeChannel.uuid] ?? []) : [];
   $: currentChannelQuery = $activeChannel ? $channelQueryStateById[$activeChannel.uuid] : null;
+  $: currentUnreadCount = $activeChannel ? ($unreadCountByChannel[$activeChannel.uuid] ?? 0) : 0;
+  $: currentLastReadMessageUuid = $activeChannel
+    ? ($lastReadMessageUuidByChannel[$activeChannel.uuid] ?? null)
+    : null;
+  $: firstNewMessageIndex = getFirstNewMessageIndex(
+    currentMessages,
+    currentUnreadCount,
+    currentLastReadMessageUuid,
+  );
   $: isInitialLoading = Boolean(
     $activeChannel && currentMessages.length === 0 && currentChannelQuery?.isLoadingInitial,
   );
@@ -153,6 +164,25 @@
     messagesContainer.scrollTop = messagesContainer.scrollHeight;
     isViewportNearBottom = true;
   }
+
+  function getFirstNewMessageIndex(
+    messages: { uuid: string }[],
+    unreadCount: number,
+    lastReadMessageUuid: string | null,
+  ): number {
+    if (messages.length === 0 || unreadCount <= 0) {
+      return -1;
+    }
+
+    if (lastReadMessageUuid) {
+      const idx = messages.findIndex((message) => message.uuid === lastReadMessageUuid);
+      if (idx >= 0) {
+        return Math.min(messages.length, idx + 1);
+      }
+    }
+
+    return Math.max(0, messages.length - unreadCount);
+  }
 </script>
 
 <section class="flex min-w-0 flex-1 flex-col bg-app-850" aria-label="Chat">
@@ -193,7 +223,16 @@
       {:else if currentMessages.length === 0}
         <p class="text-sm text-slate-400">Brak wiadomości na tym kanale.</p>
       {:else}
-        {#each currentMessages as message (message.uuid)}
+        {#each currentMessages as message, index (message.uuid)}
+          {#if firstNewMessageIndex === index}
+            <div class="my-2 flex items-center gap-2">
+              <div class="h-px flex-1 bg-emerald-500/40"></div>
+              <p class="text-[11px] font-semibold uppercase tracking-wide text-emerald-300">
+                Nowe wiadomości
+              </p>
+              <div class="h-px flex-1 bg-emerald-500/40"></div>
+            </div>
+          {/if}
           <MessageItem {message} />
         {/each}
       {/if}

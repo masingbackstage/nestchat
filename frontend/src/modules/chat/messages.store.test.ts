@@ -256,10 +256,12 @@ describe('messages.store pagination window', () => {
 
     nowSpy.mockReturnValue(1_070_000);
     await store.ensureChannelMessages(CHANNEL_UUID);
+    await vi.waitFor(() => {
+      expect(fetchMock).toHaveBeenCalledTimes(2);
+    });
 
     const queryState = get(store.channelQueryStateById)[CHANNEL_UUID];
     expect(queryState?.isLoadingInitial).toBe(false);
     expect((get(store.messagesByChannel)[CHANNEL_UUID] ?? []).length).toBe(beforeStaleRefresh);
-    expect(fetchMock).toHaveBeenCalledTimes(2);
   });
 });

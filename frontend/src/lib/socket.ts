@@ -3,6 +3,7 @@ import type { GatewayMessageEvent } from '../types/gateway';
 
 type MessageListener = (event: GatewayMessageEvent) => void;
 type ReconnectListener = () => void;
+type TokenProvider = () => string | null | Promise<string | null>;
 
 let socket: WebSocket | null = null;
 const listeners = new Set<MessageListener>();
@@ -12,6 +13,7 @@ let reconnectAttempt = 0;
 let manuallyDisconnected = false;
 let currentToken: string | null = null;
 let hasEverConnected = false;
+let tokenProvider: TokenProvider | null = null;
 
 const RECONNECT_BASE_DELAY_MS = 1_000;
 const RECONNECT_MAX_DELAY_MS = 10_000;
@@ -99,6 +101,10 @@ export function disconnectGateway(): void {
   chatConnectionStatus.set('disconnected');
 }
 
+export function setGatewayTokenProvider(provider: TokenProvider): void {
+  tokenProvider = provider;
+}
+
 export function subscribeGateway(listener: MessageListener): () => void {
   listeners.add(listener);
 
@@ -135,7 +141,7 @@ export function sendChatMessage(channelUuid: string, content: string): boolean {
 }
 
 function scheduleReconnect(): void {
-  if (!currentToken || reconnectTimer) {
+  if ((!currentToken && !tokenProvider) || reconnectTimer) {
     return;
   }
 
@@ -144,8 +150,31 @@ function scheduleReconnect(): void {
 
   reconnectTimer = setTimeout(() => {
     reconnectTimer = null;
-    if (!manuallyDisconnected && currentToken) {
+    if (manuallyDisconnected) {
+      return;
+    }
+
+    if (tokenProvider) {
+      void refreshTokenAndReconnect();
+      return;
+    }
+
+    if (currentToken) {
       connectGateway(currentToken);
     }
   }, delayMs);
+}
+
+async function refreshTokenAndReconnect(): Promise<void> {
+  if (!tokenProvider) {
+    return;
+  }
+
+  const refreshedToken = await tokenProvider();
+  if (!refreshedToken) {
+    chatConnectionStatus.set('error');
+    return;
+  }
+
+  connectGateway(refreshedToken);
 }

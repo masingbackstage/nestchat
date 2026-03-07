@@ -1,5 +1,7 @@
 import json
 
+from django.conf import settings
+from django.core.cache import cache
 from channels.db import database_sync_to_async
 from channels.generic.websocket import AsyncWebsocketConsumer
 
@@ -44,6 +46,18 @@ class GatewayConsumer(AsyncWebsocketConsumer):
                     await self.channel_layer.group_discard(group, self.channel_name)
 
     async def receive(self, text_data):
+        if await self.is_rate_limited(
+            "receive", settings.GATEWAY_RECEIVE_RATE_LIMIT_PER_MINUTE
+        ):
+            await self.gateway_send(
+                {
+                    "module": "system",
+                    "action": "error",
+                    "payload": {"code": "rate_limited", "detail": "Too many requests."},
+                }
+            )
+            return
+
         try:
             data = json.loads(text_data)
         except json.JSONDecodeError:
@@ -76,6 +90,18 @@ class GatewayConsumer(AsyncWebsocketConsumer):
 
     async def handle_chat_module(self, action, payload):
         if action == ChatAction.SEND_MESSAGE:
+            if await self.is_rate_limited(
+                "send_message", settings.GATEWAY_SEND_MESSAGE_RATE_LIMIT_PER_MINUTE
+            ):
+                await self.gateway_send(
+                    {
+                        "module": "system",
+                        "action": "error",
+                        "payload": {"code": "rate_limited", "detail": "Too many requests."},
+                    }
+                )
+                return
+
             channel_uuid = payload["channel_uuid"]
             content = payload["content"]
 
@@ -150,3 +176,18 @@ class GatewayConsumer(AsyncWebsocketConsumer):
         if hasattr(self.user, "profile") and self.user.profile.display_name:
             return self.user.profile.display_name
         return self.user.email
+
+    @database_sync_to_async
+    def is_rate_limited(self, bucket, limit):
+        cache_key = f"gateway:ratelimit:{bucket}:user:{self.user.pk}"
+        timeout = settings.GATEWAY_RATE_LIMIT_WINDOW_SECONDS
+        if cache.add(cache_key, 1, timeout=timeout):
+            return False
+
+        try:
+            current = cache.incr(cache_key)
+        except ValueError:
+            cache.set(cache_key, 1, timeout=timeout)
+            return False
+
+        return current > limit

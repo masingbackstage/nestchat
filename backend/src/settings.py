@@ -136,6 +136,18 @@ REST_FRAMEWORK = {
         "djangorestframework_camel_case.parser.CamelCaseMultiPartParser",
         "djangorestframework_camel_case.parser.CamelCaseFormParser",
     ),
+    "DEFAULT_THROTTLE_CLASSES": (
+        "rest_framework.throttling.AnonRateThrottle",
+        "rest_framework.throttling.UserRateThrottle",
+        "rest_framework.throttling.ScopedRateThrottle",
+    ),
+    "DEFAULT_THROTTLE_RATES": {
+        "anon": env("DRF_THROTTLE_ANON", default="120/min"),
+        "user": env("DRF_THROTTLE_USER", default="600/min"),
+        "dj_rest_auth": env("DRF_THROTTLE_AUTH", default="60/min"),
+        "chat_reads": env("DRF_THROTTLE_CHAT_READS", default="120/min"),
+        "chat_writes": env("DRF_THROTTLE_CHAT_WRITES", default="120/min"),
+    },
 }
 
 REST_AUTH = {
@@ -156,6 +168,14 @@ SIMPLE_JWT = {
     "USER_ID_CLAIM": "user_uuid",
 }
 
+GATEWAY_RATE_LIMIT_WINDOW_SECONDS = env.int("GATEWAY_RATE_LIMIT_WINDOW_SECONDS", default=60)
+GATEWAY_RECEIVE_RATE_LIMIT_PER_MINUTE = env.int(
+    "GATEWAY_RECEIVE_RATE_LIMIT_PER_MINUTE", default=240
+)
+GATEWAY_SEND_MESSAGE_RATE_LIMIT_PER_MINUTE = env.int(
+    "GATEWAY_SEND_MESSAGE_RATE_LIMIT_PER_MINUTE", default=60
+)
+
 
 ACCOUNT_LOGIN_METHODS = {"email"}
 ACCOUNT_SIGNUP_FIELDS = []
@@ -164,6 +184,25 @@ ACCOUNT_EMAIL_VERIFICATION = "optional"
 EMAIL_BACKEND = "django.core.mail.backends.console.EmailBackend"
 ACCOUNT_USER_MODEL_USERNAME_FIELD = None
 ACCOUNT_USERNAME_REQUIRED = False
+
+AUTH_PASSWORD_VALIDATORS = [
+    {
+        "NAME": "django.contrib.auth.password_validation.UserAttributeSimilarityValidator",
+    },
+    {
+        "NAME": "django.contrib.auth.password_validation.MinimumLengthValidator",
+        "OPTIONS": {"min_length": 10},
+    },
+    {
+        "NAME": "django.contrib.auth.password_validation.CommonPasswordValidator",
+    },
+    {
+        "NAME": "django.contrib.auth.password_validation.NumericPasswordValidator",
+    },
+    {
+        "NAME": "src.apps.user.validators.PasswordComplexityValidator",
+    },
+]
 
 LANGUAGE_CODE = "en-us"
 TIME_ZONE = "UTC"
