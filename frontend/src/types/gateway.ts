@@ -1,6 +1,8 @@
 export type Channel = {
   uuid: string;
   name: string;
+  channelEmoji?: string | null;
+  channel_emoji?: string | null;
   channelType?: string;
   channel_type?: string;
   topic?: string | null;
@@ -11,6 +13,8 @@ export type Channel = {
 export type Server = {
   uuid: string;
   name: string;
+  avatarUrl?: string | null;
+  avatar_url?: string | null;
   isOwner?: boolean;
   is_owner?: boolean;
   channels: Channel[];
@@ -18,6 +22,7 @@ export type Server = {
 
 export type CreateChannelRequest = {
   name: string;
+  channel_emoji?: string;
   channel_type: 'TEXT' | 'VOICE';
   topic?: string;
   is_public: boolean;
@@ -36,6 +41,16 @@ export type MemberRole = {
   name: string;
 };
 
+export type ServerEmoji = {
+  uuid: string;
+  name: string;
+  token?: string;
+  imageUrl?: string | null;
+  image_url?: string | null;
+  isAnimated?: boolean;
+  is_animated?: boolean;
+};
+
 export type ServerMemberItem = {
   uuid: string;
   displayName?: string;
@@ -43,7 +58,8 @@ export type ServerMemberItem = {
   isOnline?: boolean;
   is_online?: boolean;
   roles?: MemberRole[];
-  avatar?: string | null;
+  avatarUrl?: string | null;
+  avatar_url?: string | null;
   customStatus?: string | null;
   custom_status?: string | null;
 };
@@ -80,6 +96,7 @@ export type Message = {
   channel_uuid: string;
   content: string;
   author: string;
+  avatar_url?: string | null;
   author_uuid?: string;
   created_at?: string;
   updated_at?: string;
@@ -99,6 +116,8 @@ export type MessageReadDto = {
   author: string | number;
   authorProfileDisplayName?: string | null;
   author_profile_display_name?: string | null;
+  avatarUrl?: string | null;
+  avatar_url?: string | null;
   content: string;
   isDeleted?: boolean;
   is_deleted?: boolean;
@@ -130,3 +149,125 @@ export type GatewayMessageEvent = {
   action: string;
   payload: unknown;
 };
+
+export type DMParticipant = {
+  uuid: string;
+  displayName?: string;
+  display_name?: string;
+  avatarUrl?: string | null;
+  avatar_url?: string | null;
+  isOnline?: boolean;
+  is_online?: boolean;
+};
+
+export type DMConversation = {
+  uuid: string;
+  conversationType?: 'DIRECT' | 'GROUP';
+  conversation_type?: 'DIRECT' | 'GROUP';
+  title?: string | null;
+  avatarUrl?: string | null;
+  avatar_url?: string | null;
+  participants?: DMParticipant[];
+  lastMessage?: DMMessage | null;
+  last_message?: DMMessage | null;
+  unreadCount?: number;
+  unread_count?: number;
+  createdAt?: string;
+  created_at?: string;
+  updatedAt?: string;
+  updated_at?: string;
+};
+
+export type DMMessage = {
+  uuid: string;
+  conversation_uuid: string;
+  channel_uuid: string;
+  content: string;
+  author: string;
+  avatar_url?: string | null;
+  author_uuid?: string;
+  created_at?: string;
+  updated_at?: string;
+  is_deleted?: boolean;
+  is_edited?: boolean;
+  edited_at?: string | null;
+  reactions?: MessageReaction[];
+  ciphertext?: string | null;
+  nonce?: string | null;
+  encryption_version?: string | null;
+  sender_key_id?: string | null;
+  client_id?: string;
+  pending?: boolean;
+  failed?: boolean;
+};
+
+export type DMMessageReadDto = {
+  uuid: string;
+  conversationUuid?: string;
+  conversation_uuid?: string;
+  author: string | number;
+  authorProfileDisplayName?: string | null;
+  author_profile_display_name?: string | null;
+  avatarUrl?: string | null;
+  avatar_url?: string | null;
+  content: string;
+  isDeleted?: boolean;
+  is_deleted?: boolean;
+  isEdited?: boolean;
+  is_edited?: boolean;
+  editedAt?: string | null;
+  edited_at?: string | null;
+  reactions?: MessageReaction[];
+  ciphertext?: string | null;
+  nonce?: string | null;
+  encryptionVersion?: string | null;
+  encryption_version?: string | null;
+  senderKeyId?: string | null;
+  sender_key_id?: string | null;
+  createdAt?: string;
+  created_at?: string;
+  updatedAt?: string;
+  updated_at?: string;
+};
+
+export type PaginatedDMMessagesResponse = {
+  items: DMMessageReadDto[];
+  hasMoreOlder?: boolean;
+  has_more_older?: boolean;
+  hasMoreNewer?: boolean;
+  has_more_newer?: boolean;
+  nextBefore?: string | null;
+  next_before?: string | null;
+  nextAfter?: string | null;
+  next_after?: string | null;
+};
+
+export type FriendUser = {
+  uuid: string;
+  relationUuid?: string;
+  relation_uuid?: string;
+  email: string;
+  displayName?: string;
+  display_name?: string;
+  tag?: string;
+  avatarUrl?: string | null;
+  avatar_url?: string | null;
+  isOnline?: boolean;
+  is_online?: boolean;
+  customStatus?: string;
+  custom_status?: string;
+};
+
+export type FriendRequest = {
+  uuid: string;
+  status: 'PENDING' | 'ACCEPTED' | 'DECLINED' | 'CANCELED';
+  createdAt?: string;
+  created_at?: string;
+  updatedAt?: string;
+  updated_at?: string;
+  respondedAt?: string | null;
+  responded_at?: string | null;
+  user: FriendUser;
+};
+
+export type UserSearchResult = FriendUser;

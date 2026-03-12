@@ -14,6 +14,7 @@ function mapChannelResponse(payload: unknown): Channel {
   return {
     uuid: String(raw.uuid ?? ''),
     name: String(raw.name ?? ''),
+    channel_emoji: pick<string | null>(raw, 'channelEmoji', 'channel_emoji') ?? null,
     channel_type: pick<string>(raw, 'channelType', 'channel_type'),
     topic: pick<string | null>(raw, 'topic', 'topic') ?? null,
     is_public: pick<boolean>(raw, 'isPublic', 'is_public') ?? true,

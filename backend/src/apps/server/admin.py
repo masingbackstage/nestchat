@@ -1,13 +1,13 @@
 from django.contrib import admin
 
 # Pamiętaj o zaimportowaniu nowych modeli!
-from .models import Channel, Role, Server, ServerMember
+from .models import Channel, Role, Server, ServerEmoji, ServerMember
 
 
 class ChannelInline(admin.TabularInline):
     model = Channel
     extra = 1
-    fields = ("name", "channel_type", "is_public", "topic")
+    fields = ("name", "channel_emoji", "channel_type", "is_public", "topic")
 
 
 class ServerMemberInline(admin.TabularInline):
@@ -21,6 +21,12 @@ class RoleInline(admin.TabularInline):
     extra = 1
 
 
+class ServerEmojiInline(admin.TabularInline):
+    model = ServerEmoji
+    extra = 1
+    fields = ("name", "image", "is_animated")
+
+
 @admin.register(Server)
 class ServerAdmin(admin.ModelAdmin):
     list_display = ("uuid", "name", "owner", "created_at")
@@ -29,12 +35,12 @@ class ServerAdmin(admin.ModelAdmin):
         "uuid",
         "created_at",
     )
-    inlines = [RoleInline, ChannelInline, ServerMemberInline]
+    inlines = [RoleInline, ChannelInline, ServerEmojiInline, ServerMemberInline]
 
 
 @admin.register(Channel)
 class ChannelAdmin(admin.ModelAdmin):
-    list_display = ("uuid", "name", "server", "channel_type", "is_public")
+    list_display = ("uuid", "name", "channel_emoji", "server", "channel_type", "is_public")
     list_filter = ("server", "channel_type", "is_public")
     readonly_fields = (
         "uuid",
@@ -61,3 +67,11 @@ class ServerMemberAdmin(admin.ModelAdmin):
     list_select_related = ("user", "server")
 
     filter_horizontal = ("roles",)
+
+
+@admin.register(ServerEmoji)
+class ServerEmojiAdmin(admin.ModelAdmin):
+    list_display = ("uuid", "name", "server", "is_animated", "created_at")
+    list_filter = ("server", "is_animated")
+    readonly_fields = ("uuid", "created_at")
+    list_select_related = ("server",)

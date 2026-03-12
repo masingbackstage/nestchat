@@ -21,13 +21,16 @@ from django.contrib import admin
 from django.urls import include, path
 from drf_spectacular.views import SpectacularAPIView, SpectacularSwaggerView
 
-from src.apps.user.views import LogoutAllSessionsAPIView, LogoutSessionAPIView
+from src.apps.user.views import LogoutAllSessionsAPIView, LogoutSessionAPIView, UserSearchAPIView
 
 urlpatterns = [
     path("admin/", admin.site.urls),
     path("api/auth/", include("dj_rest_auth.urls")),
     path("api/servers/", include("src.apps.server.urls")),
     path("api/chat/", include("src.apps.chat.urls")),
+    path("api/dm/", include("src.apps.dm.urls")),
+    path("api/friends/", include("src.apps.friends.urls")),
+    path("api/users/search/", UserSearchAPIView.as_view(), name="user-search"),
     path("api/auth/logout-all/", LogoutAllSessionsAPIView.as_view(), name="logout-all-sessions"),
     path("api/auth/logout-session/", LogoutSessionAPIView.as_view(), name="logout-session"),
     path("api/auth/registration/", include("dj_rest_auth.registration.urls")),

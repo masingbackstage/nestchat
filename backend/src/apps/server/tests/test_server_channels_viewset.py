@@ -12,6 +12,7 @@ def pick(payload, camel_key, snake_key):
 def create_payload(**overrides):
     payload = {
         "name": "announcements",
+        "channel_emoji": "",
         "channel_type": "TEXT",
         "topic": "Server updates",
         "is_public": False,
@@ -42,6 +43,24 @@ def test_owner_can_create_channel():
     assert pick(payload, "isPublic", "is_public") is False
     assert pick(payload, "allowedRoles", "allowed_roles") == [str(role.uuid)]
     assert Channel.objects.filter(server=server, name="announcements").exists()
+
+
+@pytest.mark.django_db
+def test_owner_can_create_channel_with_channel_emoji():
+    owner = CustomUser.objects.create_user(email="owner-emoji-channel@example.com", password="pw")
+    server = Server.objects.create(name="Nest", owner=owner)
+
+    client = APIClient()
+    client.force_authenticate(user=owner)
+    response = client.post(
+        f"/api/servers/{server.uuid}/channels/",
+        create_payload(channel_emoji="🚀"),
+        format="json",
+    )
+
+    assert response.status_code == 201
+    payload = response.json()
+    assert pick(payload, "channelEmoji", "channel_emoji") == "🚀"
 
 
 @pytest.mark.django_db

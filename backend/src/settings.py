@@ -39,6 +39,8 @@ INSTALLED_APPS = [
     "src.apps.profile",
     "src.apps.server",
     "src.apps.chat",
+    "src.apps.dm",
+    "src.apps.friends",
     "src.apps.gateway",
 ]
 
@@ -147,6 +149,7 @@ REST_FRAMEWORK = {
         "dj_rest_auth": env("DRF_THROTTLE_AUTH", default="60/min"),
         "chat_reads": env("DRF_THROTTLE_CHAT_READS", default="120/min"),
         "chat_writes": env("DRF_THROTTLE_CHAT_WRITES", default="120/min"),
+        "user_search": env("DRF_THROTTLE_USER_SEARCH", default="60/min"),
     },
 }
 

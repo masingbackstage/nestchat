@@ -6,10 +6,12 @@ from rest_framework.exceptions import PermissionDenied, ValidationError
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 
-from src.apps.server.models import Channel, Role, Server
+from src.apps.server.models import Channel, Role, Server, ServerEmoji
 from src.apps.server.serializers import (
     ChannelCreateSerializer,
     ChannelDetailSerializer,
+    ServerEmojiCreateSerializer,
+    ServerEmojiSerializer,
     ServerListSerializer,
     ServerMembersResponseSerializer,
 )
@@ -25,7 +27,7 @@ class ServerViewSet(viewsets.ReadOnlyModelViewSet):
         return (
             Server.objects.filter(models.Q(owner=user) | models.Q(members=user))
             .distinct()
-            .prefetch_related("channels")
+            .prefetch_related("channels", "emojis")
         )
 
     def has_server_access(self, user, server: Server) -> bool:
@@ -44,6 +46,8 @@ class ServerViewSet(viewsets.ReadOnlyModelViewSet):
         validated_data = serializer.validated_data
 
         allowed_role_uuids = validated_data.pop("allowed_roles", [])
+        channel_emoji = validated_data.get("channel_emoji")
+        validated_data["channel_emoji"] = channel_emoji.strip() if channel_emoji else None
         is_public = validated_data["is_public"]
         if is_public:
             allowed_role_uuids = []
@@ -57,6 +61,30 @@ class ServerViewSet(viewsets.ReadOnlyModelViewSet):
             channel.allowed_roles.set(roles)
 
         response_serializer = ChannelDetailSerializer(channel)
+        return Response(response_serializer.data, status=status.HTTP_201_CREATED)
+
+    @action(detail=True, methods=["get", "post"], url_path="emojis")
+    def emojis(self, request, uuid=None):
+        server = get_object_or_404(Server, uuid=uuid)
+        if not self.has_server_access(request.user, server):
+            raise PermissionDenied("You do not have access to this server.")
+
+        if request.method.lower() == "get":
+            queryset = ServerEmoji.objects.filter(server=server).order_by("name")
+            serializer = ServerEmojiSerializer(
+                queryset,
+                many=True,
+                context={"request": request},
+            )
+            return Response(serializer.data, status=status.HTTP_200_OK)
+
+        if server.owner_id != request.user.pk:
+            raise PermissionDenied("Only server owner can create emojis.")
+
+        serializer = ServerEmojiCreateSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        emoji = serializer.save(server=server)
+        response_serializer = ServerEmojiSerializer(emoji, context={"request": request})
         return Response(response_serializer.data, status=status.HTTP_201_CREATED)
 
     @action(detail=True, methods=["get"], url_path="members")
@@ -86,10 +114,10 @@ class ServerViewSet(viewsets.ReadOnlyModelViewSet):
                 return profile.display_name
             return user.email.split("@")[0]
 
-        def to_avatar(user):
+        def to_avatar_url(user):
             profile = get_profile(user)
             if profile and profile.avatar:
-                return profile.avatar.url
+                return request.build_absolute_uri(profile.avatar.url)
             return None
 
         def to_custom_status(user):
@@ -115,7 +143,7 @@ class ServerViewSet(viewsets.ReadOnlyModelViewSet):
                 "display_name": to_display_name(user),
                 "is_online": to_is_online(user),
                 "roles": [{"uuid": role.uuid, "name": role.name} for role in roles],
-                "avatar": to_avatar(user),
+                "avatar_url": to_avatar_url(user),
                 "custom_status": to_custom_status(user),
             }
 
@@ -126,7 +154,7 @@ class ServerViewSet(viewsets.ReadOnlyModelViewSet):
                 "display_name": to_display_name(owner),
                 "is_online": to_is_online(owner),
                 "roles": [],
-                "avatar": to_avatar(owner),
+                "avatar_url": to_avatar_url(owner),
                 "custom_status": to_custom_status(owner),
             }
 

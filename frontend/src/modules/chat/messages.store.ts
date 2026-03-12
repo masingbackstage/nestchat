@@ -1,5 +1,6 @@
 import { get, writable } from 'svelte/store';
 import { authFetch } from '../../lib/auth';
+import { toApiAbsoluteUrl } from '../../lib/url';
 import type { Message, MessageReadDto, PaginatedMessagesResponse } from '../../types/gateway';
 
 type MessagesByChannel = Record<string, Message[]>;
@@ -85,6 +86,7 @@ function mapApiMessages(channelUuid: string, items: MessageReadDto[]): Message[]
       content: item.content,
       author:
         item.authorProfileDisplayName ?? item.author_profile_display_name ?? String(item.author),
+      avatar_url: toApiAbsoluteUrl(item.avatarUrl ?? item.avatar_url ?? null),
       author_uuid: String(item.author),
       is_deleted: Boolean(item.isDeleted ?? item.is_deleted ?? false),
       is_edited: Boolean(item.isEdited ?? item.is_edited ?? false),

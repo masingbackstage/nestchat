@@ -1,6 +1,5 @@
 from rest_framework import serializers
 
-from src.apps.chat.constants import ALLOWED_REACTION_EMOJIS
 from src.apps.chat.models import Message
 
 
@@ -12,6 +11,7 @@ class MessageReactionSummarySerializer(serializers.Serializer):
 
 class MessageReadSerializer(serializers.ModelSerializer):
     author_profile_display_name = serializers.ReadOnlyField(source="author.profile.display_name")
+    avatar_url = serializers.SerializerMethodField()
     channel_uuid = serializers.ReadOnlyField(source="channel.uuid")
     is_edited = serializers.SerializerMethodField()
     edited_at = serializers.DateTimeField(read_only=True, allow_null=True)
@@ -24,6 +24,7 @@ class MessageReadSerializer(serializers.ModelSerializer):
             "channel_uuid",
             "author",
             "author_profile_display_name",
+            "avatar_url",
             "content",
             "is_deleted",
             "is_edited",
@@ -36,6 +37,22 @@ class MessageReadSerializer(serializers.ModelSerializer):
 
     def get_is_edited(self, obj):
         return obj.edited_at is not None
+
+    def get_avatar_url(self, obj):
+        profile = getattr(obj.author, "profile", None)
+        avatar = getattr(profile, "avatar", None)
+        if not avatar:
+            return None
+
+        try:
+            avatar_url = avatar.url
+        except Exception:
+            return None
+
+        request = self.context.get("request")
+        if request:
+            return request.build_absolute_uri(avatar_url)
+        return avatar_url
 
     def to_representation(self, instance):
         data = super().to_representation(instance)
@@ -94,9 +111,10 @@ class ToggleReactionSerializer(serializers.Serializer):
     emoji = serializers.CharField(max_length=16)
 
     def validate_emoji(self, value):
-        if value not in ALLOWED_REACTION_EMOJIS:
-            raise serializers.ValidationError("Unsupported emoji.")
-        return value
+        emoji = value.strip()
+        if not emoji:
+            raise serializers.ValidationError("Emoji is required.")
+        return emoji
 
 
 class ChannelReadStateSerializer(serializers.Serializer):

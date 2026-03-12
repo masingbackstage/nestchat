@@ -9,12 +9,14 @@
     setAuthFailureHandler,
   } from './lib/auth';
   import { pushToast } from './lib/stores/toast';
+  import { toApiAbsoluteUrl } from './lib/url';
   import { servers } from './lib/stores/servers';
-  import { activeServer, activeChannel } from './lib/stores/ui';
+  import { activeChannel, activeDMConversation, activeServer } from './lib/stores/ui';
   import {
     connectGateway,
     disconnectGateway,
     joinGatewayChannel,
+    joinGatewayDMConversation,
     setGatewayAuthFailureHandler,
     setGatewayTokenProvider,
     subscribeGateway,
@@ -36,7 +38,7 @@
     ensureServerMembers,
     resetMembersState,
     updateServerMemberPresence,
-  } from './modules/servers/members.store';
+  } from './modules/servers/members/store';
   import type {
     GatewayMessageEvent,
     Message,
@@ -48,11 +50,26 @@
   import RegisterForm from './modules/auth/RegisterForm.svelte';
   import SettingsModal from './modules/auth/SettingsModal.svelte';
   import LandingPage from './modules/landing/LandingPage.svelte';
-  import ServerList from './modules/servers/ServerList.svelte';
+  import ServerList from './modules/servers/list/ServerList.svelte';
   import ChannelList from './modules/channels/ChannelList.svelte';
-  import ChatWindow from './modules/chat/ChatWindow.svelte';
-  import MemberSidebar from './modules/servers/MemberSidebar.svelte';
+  import ChatWindow from './modules/chat/window/ChatWindow.svelte';
+  import MemberSidebar from './modules/servers/members/MemberSidebar.svelte';
   import ToastViewport from './modules/shared/ToastViewport.svelte';
+  import {
+    addDMMessage,
+    clearDMUnread,
+    dmConversations,
+    ensureDMConversations,
+    ensureDMMessages,
+    incrementDMUnread,
+    resetDMState,
+    softDeleteDMMessage,
+    updateDMConversationPreview,
+    updateDMMessage,
+  } from './modules/dm/dm.store';
+  import type { DMMessage } from './types/gateway';
+  import DMWindow from './modules/dm/DMWindow.svelte';
+  import { loadFriendsData, resetFriendsState } from './modules/dm/friends.store';
 
   let unsubscribeGateway: (() => void) | null = null;
   let unsubscribeGatewayReconnect: (() => void) | null = null;
@@ -114,8 +131,11 @@
     servers.set([]);
     activeServer.set(null);
     activeChannel.set(null);
+    activeDMConversation.set(null);
     clearReadStateCache();
     resetChatState();
+    resetDMState();
+    resetFriendsState();
     resetMembersState();
     tearDownGatewaySubscriptions();
     isSettingsOpen = false;
@@ -176,11 +196,15 @@
       channel_id?: string;
       channel_uuid?: string;
       channelUuid?: string;
+      conversation_uuid?: string;
+      conversationUuid?: string;
       content: string;
       author: string;
       author_uuid?: string;
       author_profile_display_name?: string;
       authorProfileDisplayName?: string;
+      avatar_url?: string | null;
+      avatarUrl?: string | null;
       is_deleted?: boolean;
       isDeleted?: boolean;
       is_edited?: boolean;
@@ -218,6 +242,7 @@
         content: payload.content,
         author:
           payload.authorProfileDisplayName ?? payload.author_profile_display_name ?? payload.author,
+        avatar_url: toApiAbsoluteUrl(payload.avatarUrl ?? payload.avatar_url ?? null),
         author_uuid: payload.author_uuid ?? (payload.author ? String(payload.author) : undefined),
         is_deleted: Boolean(payload.isDeleted ?? payload.is_deleted ?? false),
         is_edited: Boolean(payload.isEdited ?? payload.is_edited ?? false),
@@ -236,6 +261,56 @@
     }
 
     if (
+      (actionName === 'dm_new_message' ||
+        actionName === 'dm_message_updated' ||
+        actionName === 'dm_message_deleted' ||
+        actionName === 'dm_message_reactions_updated') &&
+      (payload.conversation_uuid ?? payload.conversationUuid)
+    ) {
+      const dmConversationUuid = payload.conversation_uuid ?? payload.conversationUuid ?? '';
+      const message: DMMessage = {
+        uuid: payload.uuid ?? payload.id ?? '',
+        conversation_uuid: dmConversationUuid,
+        channel_uuid: dmConversationUuid,
+        content: payload.content ?? '',
+        author:
+          payload.authorProfileDisplayName ??
+          payload.author_profile_display_name ??
+          String(payload.author ?? ''),
+        avatar_url: toApiAbsoluteUrl(payload.avatarUrl ?? payload.avatar_url ?? null),
+        author_uuid: payload.author ? String(payload.author) : undefined,
+        is_deleted: Boolean(payload.isDeleted ?? payload.is_deleted ?? false),
+        is_edited: Boolean(payload.isEdited ?? payload.is_edited ?? false),
+        edited_at: payload.editedAt ?? payload.edited_at ?? null,
+        reactions: mappedReactions,
+        created_at: payload.createdAt ?? payload.created_at,
+        updated_at: payload.updatedAt ?? payload.updated_at,
+        ciphertext: null,
+        nonce: null,
+        encryption_version: null,
+        sender_key_id: null,
+        client_id: payload.client_id ?? payload.clientId,
+      };
+
+      if (actionName === 'dm_new_message') {
+        addDMMessage(message);
+        updateDMConversationPreview(dmConversationUuid, message);
+        if ($activeDMConversation?.uuid !== dmConversationUuid) {
+          incrementDMUnread(dmConversationUuid);
+        } else {
+          clearDMUnread(dmConversationUuid);
+        }
+      } else if (actionName === 'dm_message_deleted') {
+        softDeleteDMMessage(message);
+        updateDMConversationPreview(dmConversationUuid, message);
+      } else {
+        updateDMMessage(message);
+        updateDMConversationPreview(dmConversationUuid, message);
+      }
+      return;
+    }
+
+    if (
       (actionName === 'message_updated' ||
         actionName === 'message_deleted' ||
         actionName === 'message_reactions_updated') &&
@@ -249,6 +324,7 @@
           payload.authorProfileDisplayName ??
           payload.author_profile_display_name ??
           String(payload.author ?? ''),
+        avatar_url: toApiAbsoluteUrl(payload.avatarUrl ?? payload.avatar_url ?? null),
         author_uuid: payload.author ? String(payload.author) : undefined,
         is_deleted: Boolean(payload.isDeleted ?? payload.is_deleted ?? false),
         is_edited: Boolean(payload.isEdited ?? payload.is_edited ?? false),
@@ -276,6 +352,11 @@
     } else if ($activeChannel?.uuid) {
       joinGatewayChannel($activeChannel.uuid);
     }
+    const dmConversationIds = $dmConversations.map((conversation) => conversation.uuid);
+    for (const conversationUuid of dmConversationIds) {
+      joinGatewayDMConversation(conversationUuid);
+    }
+    await loadFriendsData();
   }
 
   async function loadServers(): Promise<void> {
@@ -306,6 +387,7 @@
       const firstServer = data[0] ?? null;
       activeServer.set(firstServer);
       activeChannel.set(firstServer?.channels?.[0] ?? null);
+      activeDMConversation.set(null);
 
       setGatewayTokenProvider(getValidAccessToken);
       const token = await getValidAccessToken();
@@ -357,6 +439,17 @@
   $: if ($activeChannel?.uuid) {
     ensureChannelMessages($activeChannel.uuid);
     joinGatewayChannel($activeChannel.uuid);
+  }
+
+  $: if (!$activeServer) {
+    ensureDMConversations();
+    loadFriendsData();
+  }
+
+  $: if ($activeDMConversation?.uuid) {
+    ensureDMMessages($activeDMConversation.uuid);
+    joinGatewayDMConversation($activeDMConversation.uuid);
+    clearDMUnread($activeDMConversation.uuid);
   }
 
   $: if ($activeServer?.uuid) {
@@ -488,8 +581,12 @@
         }}
       />
       <ChannelList />
-      <ChatWindow />
-      <MemberSidebar />
+      {#if $activeServer}
+        <ChatWindow />
+        <MemberSidebar />
+      {:else}
+        <DMWindow />
+      {/if}
     </div>
   </div>
   {#if isSettingsOpen}

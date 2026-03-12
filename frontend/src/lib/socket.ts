@@ -17,6 +17,7 @@ let hasEverConnected = false;
 let tokenProvider: TokenProvider | null = null;
 let authFailureHandler: AuthFailureHandler | null = null;
 const pendingChannelJoins = new Set<string>();
+const pendingDMConversationJoins = new Set<string>();
 
 const RECONNECT_BASE_DELAY_MS = 1_000;
 const RECONNECT_MAX_DELAY_MS = 10_000;
@@ -45,6 +46,28 @@ function sendJoinChannelRequest(channelUuid: string): void {
 function flushPendingChannelJoins(): void {
   for (const channelUuid of pendingChannelJoins) {
     sendJoinChannelRequest(channelUuid);
+  }
+}
+
+function sendJoinDMConversationRequest(conversationUuid: string): void {
+  if (!socket || socket.readyState !== WebSocket.OPEN) {
+    return;
+  }
+
+  socket.send(
+    JSON.stringify({
+      module: 'CHAT',
+      action: 'JOIN_DM_CONVERSATION',
+      payload: {
+        conversation_uuid: conversationUuid,
+      },
+    }),
+  );
+}
+
+function flushPendingDMConversationJoins(): void {
+  for (const conversationUuid of pendingDMConversationJoins) {
+    sendJoinDMConversationRequest(conversationUuid);
   }
 }
 
@@ -81,6 +104,7 @@ export function connectGateway(token: string): void {
     reconnectAttempt = 0;
     chatConnectionStatus.set('connected');
     flushPendingChannelJoins();
+    flushPendingDMConversationJoins();
     if (shouldNotifyReconnect) {
       reconnectListeners.forEach((listener) => listener());
     }
@@ -112,6 +136,7 @@ export function disconnectGateway(): void {
   manuallyDisconnected = true;
   currentToken = null;
   pendingChannelJoins.clear();
+  pendingDMConversationJoins.clear();
   reconnectAttempt = 0;
   hasEverConnected = false;
   if (reconnectTimer) {
@@ -235,6 +260,91 @@ export function joinGatewayChannel(channelUuid: string): boolean {
     sendJoinChannelRequest(channelUuid);
   }
   return isOpen;
+}
+
+export function joinGatewayDMConversation(conversationUuid: string): boolean {
+  pendingDMConversationJoins.add(conversationUuid);
+  const isOpen = Boolean(socket && socket.readyState === WebSocket.OPEN);
+  if (isOpen) {
+    sendJoinDMConversationRequest(conversationUuid);
+  }
+  return isOpen;
+}
+
+export function sendDMMessage(conversationUuid: string, content: string, clientId?: string): boolean {
+  if (!socket || socket.readyState !== WebSocket.OPEN) {
+    return false;
+  }
+
+  socket.send(
+    JSON.stringify({
+      module: 'CHAT',
+      action: 'SEND_DM_MESSAGE',
+      payload: {
+        conversation_uuid: conversationUuid,
+        content,
+        ...(clientId ? { client_id: clientId } : {}),
+      },
+    }),
+  );
+
+  return true;
+}
+
+export function sendEditDMMessage(dmMessageUuid: string, content: string): boolean {
+  if (!socket || socket.readyState !== WebSocket.OPEN) {
+    return false;
+  }
+
+  socket.send(
+    JSON.stringify({
+      module: 'CHAT',
+      action: 'EDIT_DM_MESSAGE',
+      payload: {
+        dm_message_uuid: dmMessageUuid,
+        content,
+      },
+    }),
+  );
+
+  return true;
+}
+
+export function sendDeleteDMMessage(dmMessageUuid: string): boolean {
+  if (!socket || socket.readyState !== WebSocket.OPEN) {
+    return false;
+  }
+
+  socket.send(
+    JSON.stringify({
+      module: 'CHAT',
+      action: 'DELETE_DM_MESSAGE',
+      payload: {
+        dm_message_uuid: dmMessageUuid,
+      },
+    }),
+  );
+
+  return true;
+}
+
+export function sendToggleDMReaction(dmMessageUuid: string, emoji: string): boolean {
+  if (!socket || socket.readyState !== WebSocket.OPEN) {
+    return false;
+  }
+
+  socket.send(
+    JSON.stringify({
+      module: 'CHAT',
+      action: 'TOGGLE_DM_REACTION',
+      payload: {
+        dm_message_uuid: dmMessageUuid,
+        emoji,
+      },
+    }),
+  );
+
+  return true;
 }
 
 function scheduleReconnect(): void {

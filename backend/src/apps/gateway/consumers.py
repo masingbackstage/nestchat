@@ -18,6 +18,17 @@ from src.apps.chat.services import (
     get_channel_for_user_or_raise,
     get_message_for_user_or_raise,
 )
+from src.apps.dm.models import DMConversationParticipant, DMMessage, DMMessageReaction
+from src.apps.dm.serializers import DMMessageReadSerializer
+from src.apps.dm.services import (
+    DMConversationNotFound,
+    DMConversationPermissionDenied,
+    DMMessageNotFound,
+    DMMessagePermissionDenied,
+    can_edit_or_delete_dm_message,
+    get_dm_conversation_for_user_or_raise,
+    get_dm_message_for_user_or_raise,
+)
 from src.apps.gateway.enums import ChatAction, ModuleType
 from src.apps.gateway.serializers import GatewayRequestSerializer
 from src.apps.profile.models import Profile
@@ -44,6 +55,11 @@ class GatewayConsumer(AsyncWebsocketConsumer):
         for group in self.channel_groups:
             await self.channel_layer.group_add(group, self.channel_name)
 
+        self.dm_groups = await self.get_user_dm_groups()
+        self.joined_dm_groups = set(self.dm_groups)
+        for group in self.dm_groups:
+            await self.channel_layer.group_add(group, self.channel_name)
+
         await self.emit_presence_status_changed(True)
 
     async def disconnect(self, close_code):
@@ -54,6 +70,9 @@ class GatewayConsumer(AsyncWebsocketConsumer):
             await self.channel_layer.group_discard(self.personal_group, self.channel_name)
             if hasattr(self, "channel_groups"):
                 for group in self.channel_groups:
+                    await self.channel_layer.group_discard(group, self.channel_name)
+            if hasattr(self, "dm_groups"):
+                for group in self.dm_groups:
                     await self.channel_layer.group_discard(group, self.channel_name)
 
     async def receive(self, text_data):
@@ -137,6 +156,264 @@ class GatewayConsumer(AsyncWebsocketConsumer):
             )
             return
 
+        if action == ChatAction.JOIN_DM_CONVERSATION:
+            conversation_uuid = payload["conversation_uuid"]
+            try:
+                await self.get_allowed_dm_conversation(conversation_uuid)
+            except DMConversationNotFound as exc:
+                await self.gateway_send(
+                    {
+                        "module": "system",
+                        "action": "error",
+                        "payload": {"code": exc.code, "detail": exc.detail},
+                    }
+                )
+                return
+            except DMConversationPermissionDenied as exc:
+                await self.gateway_send(
+                    {
+                        "module": "system",
+                        "action": "error",
+                        "payload": {"code": exc.code, "detail": exc.detail},
+                    }
+                )
+                return
+
+            group_name = f"dm_{conversation_uuid}"
+            if group_name not in self.joined_dm_groups:
+                await self.channel_layer.group_add(group_name, self.channel_name)
+                self.joined_dm_groups.add(group_name)
+            await self.gateway_send(
+                {
+                    "module": "system",
+                    "action": "ack",
+                    "payload": {
+                        "action": "join_dm_conversation",
+                        "conversation_uuid": str(conversation_uuid),
+                    },
+                }
+            )
+            return
+
+        if action == ChatAction.SEND_DM_MESSAGE:
+            conversation_uuid = payload["conversation_uuid"]
+            content = payload["content"]
+            client_id = payload.get("client_id")
+            try:
+                conversation = await self.get_allowed_dm_conversation(conversation_uuid)
+            except DMConversationNotFound as exc:
+                await self.gateway_send(
+                    {
+                        "module": "system",
+                        "action": "error",
+                        "payload": {"code": exc.code, "detail": exc.detail},
+                    }
+                )
+                return
+            except DMConversationPermissionDenied as exc:
+                await self.gateway_send(
+                    {
+                        "module": "system",
+                        "action": "error",
+                        "payload": {"code": exc.code, "detail": exc.detail},
+                    }
+                )
+                return
+
+            message = await self.save_dm_message(conversation, content)
+            serialized = await self.serialize_dm_message(message.uuid)
+            outgoing_payload = {
+                **serialized,
+                "client_id": client_id,
+            }
+            group_name = f"dm_{conversation_uuid}"
+            if group_name not in self.joined_dm_groups:
+                await self.channel_layer.group_add(group_name, self.channel_name)
+                self.joined_dm_groups.add(group_name)
+
+            await self.channel_layer.group_send(
+                group_name,
+                {
+                    "type": "gateway_send_event",
+                    "module": ModuleType.CHAT.value,
+                    "action": "dm_new_message",
+                    "payload": outgoing_payload,
+                },
+            )
+            return
+
+        if action == ChatAction.EDIT_DM_MESSAGE:
+            message_uuid = payload["dm_message_uuid"]
+            content = payload["content"]
+            try:
+                message = await self.get_allowed_dm_message(message_uuid)
+            except DMMessageNotFound as exc:
+                await self.gateway_send(
+                    {
+                        "module": "system",
+                        "action": "error",
+                        "payload": {"code": exc.code, "detail": exc.detail},
+                    }
+                )
+                return
+            except DMMessagePermissionDenied as exc:
+                await self.gateway_send(
+                    {
+                        "module": "system",
+                        "action": "error",
+                        "payload": {"code": exc.code, "detail": exc.detail},
+                    }
+                )
+                return
+
+            can_manage = await self.can_manage_dm_message(message.uuid)
+            if not can_manage:
+                await self.gateway_send(
+                    {
+                        "module": "system",
+                        "action": "error",
+                        "payload": {"code": "permission_denied", "detail": "Permission denied."},
+                    }
+                )
+                return
+            if message.is_deleted:
+                await self.gateway_send(
+                    {
+                        "module": "system",
+                        "action": "error",
+                        "payload": {
+                            "code": "invalid_operation",
+                            "detail": "Cannot edit deleted message.",
+                        },
+                    }
+                )
+                return
+
+            updated = await self.update_dm_message_content(message.uuid, content)
+            payload_data = await self.serialize_dm_message(updated.uuid)
+            group_name = f"dm_{payload_data['conversation_uuid']}"
+            if group_name not in self.joined_dm_groups:
+                await self.channel_layer.group_add(group_name, self.channel_name)
+                self.joined_dm_groups.add(group_name)
+
+            await self.channel_layer.group_send(
+                group_name,
+                {
+                    "type": "gateway_send_event",
+                    "module": ModuleType.CHAT.value,
+                    "action": "dm_message_updated",
+                    "payload": payload_data,
+                },
+            )
+            return
+
+        if action == ChatAction.DELETE_DM_MESSAGE:
+            message_uuid = payload["dm_message_uuid"]
+            try:
+                message = await self.get_allowed_dm_message(message_uuid)
+            except DMMessageNotFound as exc:
+                await self.gateway_send(
+                    {
+                        "module": "system",
+                        "action": "error",
+                        "payload": {"code": exc.code, "detail": exc.detail},
+                    }
+                )
+                return
+            except DMMessagePermissionDenied as exc:
+                await self.gateway_send(
+                    {
+                        "module": "system",
+                        "action": "error",
+                        "payload": {"code": exc.code, "detail": exc.detail},
+                    }
+                )
+                return
+
+            can_manage = await self.can_manage_dm_message(message.uuid)
+            if not can_manage:
+                await self.gateway_send(
+                    {
+                        "module": "system",
+                        "action": "error",
+                        "payload": {"code": "permission_denied", "detail": "Permission denied."},
+                    }
+                )
+                return
+
+            deleted = await self.soft_delete_dm_message(message.uuid)
+            payload_data = await self.serialize_dm_message(deleted.uuid)
+            group_name = f"dm_{payload_data['conversation_uuid']}"
+            if group_name not in self.joined_dm_groups:
+                await self.channel_layer.group_add(group_name, self.channel_name)
+                self.joined_dm_groups.add(group_name)
+
+            await self.channel_layer.group_send(
+                group_name,
+                {
+                    "type": "gateway_send_event",
+                    "module": ModuleType.CHAT.value,
+                    "action": "dm_message_deleted",
+                    "payload": payload_data,
+                },
+            )
+            return
+
+        if action == ChatAction.TOGGLE_DM_REACTION:
+            message_uuid = payload["dm_message_uuid"]
+            emoji = payload["emoji"]
+            try:
+                message = await self.get_allowed_dm_message(message_uuid)
+            except DMMessageNotFound as exc:
+                await self.gateway_send(
+                    {
+                        "module": "system",
+                        "action": "error",
+                        "payload": {"code": exc.code, "detail": exc.detail},
+                    }
+                )
+                return
+            except DMMessagePermissionDenied as exc:
+                await self.gateway_send(
+                    {
+                        "module": "system",
+                        "action": "error",
+                        "payload": {"code": exc.code, "detail": exc.detail},
+                    }
+                )
+                return
+
+            if message.is_deleted:
+                await self.gateway_send(
+                    {
+                        "module": "system",
+                        "action": "error",
+                        "payload": {
+                            "code": "validation_error",
+                            "detail": "Cannot react to deleted message.",
+                        },
+                    }
+                )
+                return
+
+            updated = await self.toggle_dm_message_reaction(message.uuid, emoji)
+            payload_data = await self.serialize_dm_message(updated.uuid)
+            group_name = f"dm_{payload_data['conversation_uuid']}"
+            if group_name not in self.joined_dm_groups:
+                await self.channel_layer.group_add(group_name, self.channel_name)
+                self.joined_dm_groups.add(group_name)
+
+            await self.channel_layer.group_send(
+                group_name,
+                {
+                    "type": "gateway_send_event",
+                    "module": ModuleType.CHAT.value,
+                    "action": "dm_message_reactions_updated",
+                    "payload": payload_data,
+                },
+            )
+            return
+
         if action == ChatAction.SEND_MESSAGE:
             if await self.is_rate_limited(
                 "send_message", settings.GATEWAY_SEND_MESSAGE_RATE_LIMIT_PER_MINUTE
@@ -177,6 +454,15 @@ class GatewayConsumer(AsyncWebsocketConsumer):
 
             message = await self.save_message(channel, content)
             author_name = await self.get_author_name()
+            serialized = await self.serialize_message(message.uuid)
+            outgoing_payload = {
+                **serialized,
+                "id": str(message.uuid),
+                "channel_id": str(channel_uuid),
+                "author": author_name,
+                "author_uuid": str(self.user.uuid),
+                "client_id": client_id,
+            }
 
             group_name = f"channel_{channel_uuid}"
             if group_name not in self.joined_channel_groups:
@@ -188,14 +474,7 @@ class GatewayConsumer(AsyncWebsocketConsumer):
                     "type": "gateway_send_event",
                     "module": ModuleType.CHAT.value,
                     "action": "new_message",
-                    "payload": {
-                        "id": str(message.uuid),
-                        "channel_id": str(channel_uuid),
-                        "content": content,
-                        "author": author_name,
-                        "author_uuid": str(self.user.uuid),
-                        "client_id": client_id,
-                    },
+                    "payload": outgoing_payload,
                 },
             )
             return
@@ -406,6 +685,13 @@ class GatewayConsumer(AsyncWebsocketConsumer):
         return [f"channel_{channel.uuid}" for channel in channels]
 
     @database_sync_to_async
+    def get_user_dm_groups(self):
+        conversation_ids = DMConversationParticipant.objects.filter(user=self.user).values_list(
+            "conversation__uuid", flat=True
+        )
+        return [f"dm_{conversation_uuid}" for conversation_uuid in conversation_ids]
+
+    @database_sync_to_async
     def get_presence_targets(self):
         servers = (
             Server.objects.filter(members=self.user) | Server.objects.filter(owner=self.user)
@@ -429,12 +715,32 @@ class GatewayConsumer(AsyncWebsocketConsumer):
         return get_channel_for_user_or_raise(self.user, channel_uuid)
 
     @database_sync_to_async
+    def get_allowed_dm_conversation(self, conversation_uuid):
+        return get_dm_conversation_for_user_or_raise(self.user, conversation_uuid)
+
+    @database_sync_to_async
     def save_message(self, channel, content):
         return Message.objects.create(channel=channel, author=self.user, content=content)
 
     @database_sync_to_async
+    def save_dm_message(self, conversation, content):
+        message = DMMessage.objects.create(conversation=conversation, author=self.user, content=content)
+        conversation.updated_at = timezone.now()
+        conversation.save(update_fields=["updated_at"])
+        return message
+
+    @database_sync_to_async
     def get_allowed_message(self, message_uuid):
         return get_message_for_user_or_raise(self.user, message_uuid)
+
+    @database_sync_to_async
+    def get_allowed_dm_message(self, message_uuid):
+        return get_dm_message_for_user_or_raise(self.user, message_uuid)
+
+    @database_sync_to_async
+    def can_manage_dm_message(self, message_uuid):
+        message = DMMessage.objects.select_related("author").get(uuid=message_uuid)
+        return can_edit_or_delete_dm_message(self.user, message)
 
     @database_sync_to_async
     def update_message_content(self, message_uuid, content):
@@ -470,6 +776,47 @@ class GatewayConsumer(AsyncWebsocketConsumer):
         return message
 
     @database_sync_to_async
+    def update_dm_message_content(self, message_uuid, content):
+        message = DMMessage.objects.select_related("conversation").get(uuid=message_uuid)
+        message.content = content
+        message.edited_at = timezone.now()
+        message.save(update_fields=["content", "edited_at", "updated_at"])
+        message.conversation.updated_at = timezone.now()
+        message.conversation.save(update_fields=["updated_at"])
+        return message
+
+    @database_sync_to_async
+    def soft_delete_dm_message(self, message_uuid):
+        message = DMMessage.objects.select_related("conversation").get(uuid=message_uuid)
+        if not message.is_deleted:
+            message.is_deleted = True
+            message.deleted_at = timezone.now()
+            message.deleted_by = self.user
+            message.content = ""
+            message.save(
+                update_fields=["is_deleted", "deleted_at", "deleted_by", "content", "updated_at"]
+            )
+            message.conversation.updated_at = timezone.now()
+            message.conversation.save(update_fields=["updated_at"])
+        return message
+
+    @database_sync_to_async
+    def toggle_dm_message_reaction(self, message_uuid, emoji):
+        message = DMMessage.objects.select_related("conversation").get(uuid=message_uuid)
+        reaction = DMMessageReaction.objects.filter(
+            message=message,
+            user=self.user,
+            emoji=emoji,
+        ).first()
+        if reaction:
+            reaction.delete()
+        else:
+            DMMessageReaction.objects.create(message=message, user=self.user, emoji=emoji)
+        message.conversation.updated_at = timezone.now()
+        message.conversation.save(update_fields=["updated_at"])
+        return message
+
+    @database_sync_to_async
     def serialize_message(self, message_uuid):
         message = (
             Message.objects.select_related("author", "author__profile", "channel")
@@ -477,6 +824,21 @@ class GatewayConsumer(AsyncWebsocketConsumer):
             .get(uuid=message_uuid)
         )
         data = MessageReadSerializer(message, context={"user": self.user}).data
+        for key, value in list(data.items()):
+            if isinstance(value, uuid.UUID):
+                data[key] = str(value)
+            elif isinstance(value, (datetime, date)):
+                data[key] = value.isoformat()
+        return data
+
+    @database_sync_to_async
+    def serialize_dm_message(self, message_uuid):
+        message = (
+            DMMessage.objects.select_related("author", "author__profile", "conversation")
+            .prefetch_related("reactions")
+            .get(uuid=message_uuid)
+        )
+        data = DMMessageReadSerializer(message, context={"user": self.user}).data
         for key, value in list(data.items()):
             if isinstance(value, uuid.UUID):
                 data[key] = str(value)

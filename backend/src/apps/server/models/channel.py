@@ -9,6 +9,7 @@ class Channel(models.Model):
     uuid = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     server = models.ForeignKey("server.Server", on_delete=models.CASCADE, related_name="channels")
     name = models.CharField(max_length=100)
+    channel_emoji = models.CharField(max_length=16, blank=True, null=True)
     topic = models.CharField(max_length=255, blank=True, null=True)
     channel_type = models.CharField(
         choices=ChannelType.choices, max_length=5, default=ChannelType.TEXT

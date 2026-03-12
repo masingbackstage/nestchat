@@ -1,11 +1,12 @@
 <script lang="ts">
-  import { Volume2 } from 'lucide-svelte';
+  import { Plus, Volume2 } from 'lucide-svelte';
   import { servers } from '../../lib/stores/servers';
   import { pushToast } from '../../lib/stores/toast';
   import { activeServer, activeChannel } from '../../lib/stores/ui';
   import { createChannel } from './channels.api';
   import CreateChannelModal from './CreateChannelModal.svelte';
   import { unreadCountByChannel } from '../chat/messages.store';
+  import DMConversationList from '../dm/DMConversationList.svelte';
   import type { Channel } from '../../types/gateway';
 
   let isCreateModalOpen = false;
@@ -36,6 +37,7 @@
     try {
       const channel = await createChannel($activeServer.uuid, {
         name: event.detail.name,
+        channel_emoji: event.detail.channelEmoji || undefined,
         channel_type: event.detail.channelType,
         topic: event.detail.topic,
         is_public: event.detail.isPublic,
@@ -78,23 +80,10 @@
   }
 </script>
 
-<nav class="glass-panel w-[280px] shrink-0 rounded-panel" aria-label="Channels">
+<nav class="glass-panel flex w-[280px] shrink-0 flex-col overflow-hidden rounded-panel" aria-label="Channels">
   {#if $activeServer}
-    <header class="flex h-16 items-center justify-between border-b border-white/10 px-4">
+    <header class="flex h-16 items-center border-b border-white/10 px-4">
       <span class="truncate text-lg font-semibold text-slate-100">{$activeServer.name}</span>
-      {#if canCreateChannels()}
-        <button
-          type="button"
-          class="ml-2 rounded-xl border border-white/15 bg-white/5 px-2.5 py-1 text-xs font-medium text-muted-200 transition hover:border-glass-highlight hover:bg-white/10 hover:text-slate-100"
-          on:click={() => {
-            isCreateModalOpen = true;
-          }}
-          aria-label="Create channel"
-          title="Create channel"
-        >
-          +
-        </button>
-      {/if}
     </header>
 
     <div class="app-scrollbar flex min-h-0 flex-1 flex-col gap-5 overflow-auto px-3 py-3">
@@ -114,7 +103,13 @@
             }`}
             on:click={() => selectChannel(channel)}
           >
-            <span aria-hidden="true" class="text-muted-500">#</span>
+            {#if channel.channelEmoji ?? channel.channel_emoji}
+              <span aria-hidden="true" class="text-muted-400">
+                {channel.channelEmoji ?? channel.channel_emoji}
+              </span>
+            {:else}
+              <span aria-hidden="true" class="text-muted-500">#</span>
+            {/if}
             <span class="truncate font-medium">{channel.name}</span>
             {#if ($unreadCountByChannel[channel.uuid] ?? 0) > 0}
               <span
@@ -144,6 +139,11 @@
             on:click={() => selectChannel(channel)}
           >
             <Volume2 aria-hidden="true" class="h-4 w-4 shrink-0 text-muted-500" />
+            {#if channel.channelEmoji ?? channel.channel_emoji}
+              <span aria-hidden="true" class="text-muted-400">
+                {channel.channelEmoji ?? channel.channel_emoji}
+              </span>
+            {/if}
             <span class="truncate font-medium">{channel.name}</span>
             {#if ($unreadCountByChannel[channel.uuid] ?? 0) > 0}
               <span
@@ -155,9 +155,27 @@
           </button>
         {/each}
       </section>
+
     </div>
+
+    {#if canCreateChannels()}
+      <div class="mt-auto border-t border-white/10 px-3 py-3">
+        <button
+          type="button"
+          class="mb-0.5 flex w-full items-center gap-2 rounded-xl px-2.5 py-2 text-left text-sm text-muted-300 transition hover:bg-white/5 hover:text-slate-100"
+          on:click={() => {
+            isCreateModalOpen = true;
+          }}
+          aria-label="Create channel"
+          title="Create channel"
+        >
+          <Plus aria-hidden="true" class="h-4 w-4 shrink-0 text-muted-500" />
+          <span class="truncate font-medium">Create channel</span>
+        </button>
+      </div>
+    {/if}
   {:else}
-    <div class="p-4 text-sm text-muted-300">No server selected</div>
+    <DMConversationList />
   {/if}
 </nav>
 

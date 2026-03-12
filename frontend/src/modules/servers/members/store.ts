@@ -1,27 +1,8 @@
 import { get, writable } from 'svelte/store';
-import { authFetch } from '../../lib/auth';
-import type { MemberRole, ServerMemberItem, ServerMembersResponse } from '../../types/gateway';
-
-export type MemberItem = {
-  uuid: string;
-  displayName: string;
-  isOnline: boolean;
-  roles: MemberRole[];
-  avatar: string | null;
-  customStatus: string | null;
-};
-
-export type MembersGroup = {
-  key: string;
-  label: string;
-  members: MemberItem[];
-};
-
-type MembersQueryState = {
-  fetchedAt: number | null;
-  isLoading: boolean;
-  error: string | null;
-};
+import { authFetch } from '../../../lib/auth';
+import { getApiBaseUrl } from '../../../lib/url';
+import type { ServerMemberItem, ServerMembersResponse } from '../../../types/gateway';
+import type { MemberItem, MembersGroup, MembersQueryState } from './types';
 
 const MEMBERS_CACHE_TTL_MS = 60_000;
 const defaultQueryState: MembersQueryState = {
@@ -30,14 +11,10 @@ const defaultQueryState: MembersQueryState = {
   error: null,
 };
 
-const inFlightByServer: Record<string, Promise<void> | undefined> = {};
+const inFlightByServer = new Map<string, Promise<void>>();
 
 export const membersByServer = writable<Record<string, MembersGroup[]>>({});
 export const membersQueryStateByServer = writable<Record<string, MembersQueryState>>({});
-
-function getBaseUrl(): string | null {
-  return import.meta.env.VITE_API_URL ?? null;
-}
 
 function getServerQueryState(serverUuid: string): MembersQueryState {
   return get(membersQueryStateByServer)[serverUuid] ?? defaultQueryState;
@@ -59,7 +36,7 @@ function normalizeMember(member: ServerMemberItem): MemberItem {
     displayName: member.displayName ?? member.display_name ?? 'Unknown user',
     isOnline: Boolean(member.isOnline ?? member.is_online ?? false),
     roles: member.roles ?? [],
-    avatar: member.avatar ?? null,
+    avatarUrl: member.avatarUrl ?? member.avatar_url ?? null,
     customStatus: member.customStatus ?? member.custom_status ?? null,
   };
 }
@@ -83,11 +60,7 @@ function isCacheFresh(serverUuid: string): boolean {
 }
 
 async function fetchServerMembers(serverUuid: string): Promise<MembersGroup[]> {
-  const baseUrl = getBaseUrl();
-  if (!baseUrl) {
-    throw new Error('Missing VITE_API_URL.');
-  }
-
+  const baseUrl = getApiBaseUrl();
   const response = await authFetch(`${baseUrl}/servers/${serverUuid}/members/`);
   if (!response.ok) {
     const errorBody = await response.text();
@@ -102,8 +75,9 @@ export async function ensureServerMembers(serverUuid: string, force = false): Pr
   if (!force && isCacheFresh(serverUuid)) {
     return;
   }
-  if (inFlightByServer[serverUuid]) {
-    await inFlightByServer[serverUuid];
+  const inFlightRequest = inFlightByServer.get(serverUuid);
+  if (inFlightRequest) {
+    await inFlightRequest;
     return;
   }
 
@@ -123,11 +97,11 @@ export async function ensureServerMembers(serverUuid: string, force = false): Pr
         error: error instanceof Error ? error.message : 'Failed to load members.',
       });
     } finally {
-      delete inFlightByServer[serverUuid];
+      inFlightByServer.delete(serverUuid);
     }
   })();
 
-  inFlightByServer[serverUuid] = request;
+  inFlightByServer.set(serverUuid, request);
   await request;
 }
 
@@ -174,7 +148,5 @@ export function updateServerMemberPresence(
 export function resetMembersState(): void {
   membersByServer.set({});
   membersQueryStateByServer.set({});
-  for (const key of Object.keys(inFlightByServer)) {
-    delete inFlightByServer[key];
-  }
+  inFlightByServer.clear();
 }

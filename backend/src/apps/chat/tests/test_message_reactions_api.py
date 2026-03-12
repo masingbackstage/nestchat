@@ -81,7 +81,7 @@ def test_toggle_reaction_counts_two_users():
 
 
 @pytest.mark.django_db
-def test_toggle_reaction_rejects_unsupported_emoji():
+def test_toggle_reaction_accepts_unicode_emoji_outside_old_whitelist():
     owner = CustomUser.objects.create_user(email="owner-r3@example.com", password="pw")
     user = CustomUser.objects.create_user(email="user-r3@example.com", password="pw")
     server = Server.objects.create(name="R Server 3", owner=owner)
@@ -96,7 +96,10 @@ def test_toggle_reaction_rejects_unsupported_emoji():
         {"emoji": "🚀"},
         format="json",
     )
-    assert response.status_code == 400
+    assert response.status_code == 200
+    reactions = response.json()["reactions"]
+    assert len(reactions) == 1
+    assert reactions[0]["emoji"] == "🚀"
 
 
 @pytest.mark.django_db
