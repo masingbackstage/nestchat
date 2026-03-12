@@ -1,7 +1,7 @@
 import { get } from 'svelte/store';
 import type { Writable } from 'svelte/store';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import type { Message } from '../../types/gateway';
+import type { Message } from '../../../types/gateway';
 
 const CHANNEL_UUID = 'channel-1';
 const PAGE_LIMIT = 50;
@@ -167,7 +167,7 @@ async function loadStoreModule(): Promise<StoreModule> {
     configurable: true,
   });
 
-  return (await import('./messages.store')) as StoreModule;
+  return (await import('./store')) as StoreModule;
 }
 
 describe('messages.store pagination window', () => {

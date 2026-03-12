@@ -33,7 +33,7 @@
     softDeleteMessage,
     syncChannelFromLatestCursor,
     updateMessage,
-  } from './modules/chat/messages.store';
+  } from './modules/chat/messages';
   import {
     ensureServerMembers,
     resetMembersState,
@@ -52,7 +52,7 @@
   import LandingPage from './modules/landing/LandingPage.svelte';
   import ServerList from './modules/servers/list/ServerList.svelte';
   import ChannelList from './modules/channels/ChannelList.svelte';
-  import ChatWindow from './modules/chat/window/ChatWindow.svelte';
+  import ChatWindow from './modules/chat/window';
   import MemberSidebar from './modules/servers/members/MemberSidebar.svelte';
   import ToastViewport from './modules/shared/ToastViewport.svelte';
   import {

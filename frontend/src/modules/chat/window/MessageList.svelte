@@ -1,6 +1,6 @@
 <script lang="ts">
   import { Hash } from 'lucide-svelte';
-  import MessageItem from '../MessageItem.svelte';
+  import MessageItem from '../message-item';
   import type { Message } from '../../../types/gateway';
   import type { WindowChannelQueryState, WindowReactionEmoji } from './types';
 

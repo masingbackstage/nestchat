@@ -1,4 +1,4 @@
-import { chatConnectionStatus } from '../modules/chat/messages.store';
+import { chatConnectionStatus } from '../modules/chat/messages';
 import type { GatewayMessageEvent } from '../types/gateway';
 
 type MessageListener = (event: GatewayMessageEvent) => void;

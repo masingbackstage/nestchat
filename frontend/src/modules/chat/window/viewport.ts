@@ -1,5 +1,5 @@
 import { tick } from 'svelte';
-import { loadNewerMessages, loadOlderMessages } from '../messages.store';
+import { loadNewerMessages, loadOlderMessages } from '../messages';
 import { isNearBottom } from './utils';
 import type { ViewportState, WindowChannelQueryState } from './types';
 

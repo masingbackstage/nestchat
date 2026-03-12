@@ -14,7 +14,7 @@
     markDMConversationAsRead,
   } from './dm.store';
   import { sendDeleteDMMessage, sendEditDMMessage, sendToggleDMReaction } from '../../lib/socket';
-  import MessageItem from '../chat/MessageItem.svelte';
+  import MessageItem from '../chat/message-item';
   import DMMessageInput from './DMMessageInput.svelte';
 
   let messagesContainer: HTMLDivElement | null = null;

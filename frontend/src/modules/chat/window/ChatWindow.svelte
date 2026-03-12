@@ -5,13 +5,13 @@
   import { activeChannel, activeServer } from '../../../lib/stores/ui';
   import type { WindowViewModel } from './types';
   import { ensureServerEmojis, serverEmojisByServer } from '../../servers/emojis/store';
-  import MessageInput from '../MessageInput.svelte';
+  import MessageInput from '../message-input';
   import {
     channelQueryStateById,
     lastReadMessageUuidByChannel,
     messagesByChannel,
     unreadCountByChannel,
-  } from '../messages.store';
+  } from '../messages';
   import ChatHeader from './ChatHeader.svelte';
   import DeleteMessageModal from './DeleteMessageModal.svelte';
   import MessageList from './MessageList.svelte';
@@ -269,7 +269,7 @@
   }
 
   .chat-window-messages {
-    @apply flex-1 space-y-1 overflow-auto px-4 py-4;
+    @apply flex-1 overflow-auto px-4 py-4;
   }
 
   .chat-window-jump {

@@ -5,7 +5,7 @@
   import { activeServer, activeChannel } from '../../lib/stores/ui';
   import { createChannel } from './channels.api';
   import CreateChannelModal from './CreateChannelModal.svelte';
-  import { unreadCountByChannel } from '../chat/messages.store';
+  import { unreadCountByChannel } from '../chat/messages';
   import DMConversationList from '../dm/DMConversationList.svelte';
   import type { Channel } from '../../types/gateway';
 
