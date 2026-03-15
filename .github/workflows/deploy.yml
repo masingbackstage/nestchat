@@ -88,6 +88,7 @@ jobs:
       - backend
       - frontend
     runs-on: ubuntu-latest
+    environment: prod
     steps:
       - name: Deploy over SSH
         uses: appleboy/ssh-action@v1.2.0
