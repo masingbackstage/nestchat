@@ -148,6 +148,12 @@ AWS_S3_ENDPOINT_URL = env("AWS_S3_ENDPOINT_URL", default="")
 AWS_S3_CUSTOM_DOMAIN = env("AWS_S3_CUSTOM_DOMAIN", default="")
 AWS_ACCESS_KEY_ID = env("AWS_ACCESS_KEY_ID", default="")
 AWS_SECRET_ACCESS_KEY = env("AWS_SECRET_ACCESS_KEY", default="")
+AWS_REQUEST_CHECKSUM_CALCULATION = env(
+    "AWS_REQUEST_CHECKSUM_CALCULATION", default="when_required"
+)
+AWS_RESPONSE_CHECKSUM_VALIDATION = env(
+    "AWS_RESPONSE_CHECKSUM_VALIDATION", default="when_required"
+)
 AWS_DEFAULT_ACL = None
 AWS_QUERYSTRING_AUTH = False
 AWS_S3_FILE_OVERWRITE = False
@@ -170,6 +176,16 @@ if USE_S3_MEDIA:
         raise ImproperlyConfigured(
             "Missing S3 media configuration: " + ", ".join(missing_storage_vars)
         )
+
+    # S3-compatible providers like OCI Object Storage can reject the newer
+    # boto3 default checksum behavior introduced in 1.36+, so we keep the
+    # pre-1.36 request/response behavior unless the environment overrides it.
+    os.environ.setdefault(
+        "AWS_REQUEST_CHECKSUM_CALCULATION", AWS_REQUEST_CHECKSUM_CALCULATION
+    )
+    os.environ.setdefault(
+        "AWS_RESPONSE_CHECKSUM_VALIDATION", AWS_RESPONSE_CHECKSUM_VALIDATION
+    )
 
     STORAGES = {
         "default": {
