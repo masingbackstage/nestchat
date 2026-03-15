@@ -31,8 +31,8 @@ RUN if [ "$ENV" = 'development' ]; then \
 RUN groupadd -g $GID -o user && \
     useradd --no-log-init -u $UID -g $GID -o -s /bin/bash -m user
 
-# Nadajemy uprawnienia dla nowego katalogu
-RUN chown -R user:user /backend "$POETRY_CACHE_DIR"
+# Upewniamy sie, ze katalog cache istnieje takze po buildzie produkcyjnym.
+RUN mkdir -p "$POETRY_CACHE_DIR" && chown -R user:user /backend "$POETRY_CACHE_DIR"
 
 USER user
 
