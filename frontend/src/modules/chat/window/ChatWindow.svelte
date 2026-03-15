@@ -4,7 +4,7 @@
   import { UNICODE_EMOJI_PICKER } from '../../../lib/emoji';
   import { activeChannel, activeServer } from '../../../lib/stores/ui';
   import type { WindowViewModel } from './types';
-  import { ensureServerEmojis, serverEmojisByServer } from '../../servers/emojis/store';
+  import { ensureServerEmojis, serverEmojisByServer } from '../../servers/emojis';
   import MessageInput from '../message-input';
   import {
     channelQueryStateById,

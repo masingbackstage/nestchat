@@ -1,9 +1,9 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import { Check, MessageSquarePlus, UserMinus, X } from 'lucide-svelte';
-  import { joinGatewayDMConversation } from '../../lib/socket';
-  import { pushToast } from '../../lib/stores/toast';
-  import { activeDMConversation } from '../../lib/stores/ui';
+  import { joinGatewayDMConversation } from '../../../lib/socket';
+  import { pushToast } from '../../../lib/stores/toast';
+  import { activeDMConversation } from '../../../lib/stores/ui';
   import CreateDMConversationModal from './CreateDMConversationModal.svelte';
   import {
     createDMConversation,
@@ -11,7 +11,7 @@
     ensureDMConversations,
     ensureDMMessages,
     openDirectConversation,
-  } from './dm.store';
+  } from '../messages';
   import {
     acceptFriendRequest,
     declineFriendRequest,
@@ -22,8 +22,8 @@
     loadFriendsData,
     outgoingFriendRequests,
     removeFriendRelation,
-  } from './friends.store';
-  import type { DMConversation, FriendUser } from '../../types/gateway';
+  } from '../friends';
+  import type { DMConversation, FriendUser } from '../../../types/gateway';
 
   let isLoading = false;
   let isCreateModalOpen = false;
@@ -133,7 +133,7 @@
   }
 
   $: onlineFriends = $friends.filter((friend) => Boolean(friend.isOnline ?? friend.is_online));
-  $: offlineFriends = $friends.filter((friend) => !Boolean(friend.isOnline ?? friend.is_online));
+  $: offlineFriends = $friends.filter((friend) => !(friend.isOnline ?? friend.is_online));
 
   onMount(() => {
     void loadConversations();
@@ -141,11 +141,11 @@
 </script>
 
 <nav class="flex min-h-0 flex-1 flex-col" aria-label="Direct messages">
-  <header class="flex items-center justify-between px-4 py-3 text-xs font-semibold uppercase tracking-[0.16em] text-muted-500">
+  <header class="dm-conversation-list-header">
     <span>Direct messages</span>
     <button
       type="button"
-      class="rounded-md p-1 text-muted-400 transition hover:bg-white/10 hover:text-slate-100"
+      class="dm-conversation-list-header-button"
       title="New conversation"
       aria-label="New conversation"
       on:click={() => {
@@ -156,44 +156,44 @@
     </button>
   </header>
 
-  <div class="app-scrollbar min-h-0 flex-1 overflow-auto px-3 pb-3">
+  <div class="app-scrollbar dm-conversation-list-body">
     {#if isLoading || $friendsLoading}
-      <p class="px-2 py-2 text-sm text-muted-300">Loading...</p>
+      <p class="dm-conversation-list-state-copy">Loading...</p>
     {:else}
-      <section class="mb-4">
-        <h3 class="mb-1 px-2 text-[11px] font-semibold uppercase tracking-[0.16em] text-muted-500">Friends</h3>
+      <section class="dm-conversation-list-section">
+        <h3 class="dm-conversation-list-section-title">Friends</h3>
 
         {#if onlineFriends.length > 0}
-          <p class="px-2 pb-1 text-[10px] uppercase tracking-[0.16em] text-emerald-300/80">Online</p>
+          <p class="dm-conversation-list-subsection dm-conversation-list-subsection-online">Online</p>
           {#each onlineFriends as friend (friend.uuid)}
             <button
               type="button"
-              class="mb-1 flex w-full items-center gap-2 rounded-xl px-2.5 py-2 text-left text-sm text-muted-100 transition hover:bg-white/5"
+              class="dm-conversation-list-row dm-conversation-list-row-button dm-conversation-list-row-online"
               on:click={() => startDirectConversation(friend)}
             >
-              <div class="h-8 w-8 shrink-0 overflow-hidden rounded-full bg-surface-800">
+              <div class="dm-conversation-list-avatar">
                 {#if friend.avatarUrl ?? friend.avatar_url}
-                  <img src={friend.avatarUrl ?? friend.avatar_url} alt={friend.displayName ?? friend.display_name ?? friend.email} class="h-full w-full object-cover" />
+                  <img src={friend.avatarUrl ?? friend.avatar_url} alt={friend.displayName ?? friend.display_name ?? friend.email} class="dm-conversation-list-avatar-image" />
                 {/if}
               </div>
-              <span class="truncate">{friend.displayName ?? friend.display_name ?? friend.email}</span>
+              <span class="dm-conversation-list-name">{friend.displayName ?? friend.display_name ?? friend.email}</span>
             </button>
           {/each}
         {/if}
 
         {#if offlineFriends.length > 0}
-          <p class="px-2 pb-1 pt-1 text-[10px] uppercase tracking-[0.16em] text-muted-500">Offline</p>
+          <p class="dm-conversation-list-subsection dm-conversation-list-subsection-muted">Offline</p>
           {#each offlineFriends as friend (friend.uuid)}
-            <div class="mb-1 flex items-center gap-2 rounded-xl px-2.5 py-2 text-sm text-muted-300">
-              <div class="h-8 w-8 shrink-0 overflow-hidden rounded-full bg-surface-800">
+            <div class="dm-conversation-list-row dm-conversation-list-row-muted">
+              <div class="dm-conversation-list-avatar">
                 {#if friend.avatarUrl ?? friend.avatar_url}
-                  <img src={friend.avatarUrl ?? friend.avatar_url} alt={friend.displayName ?? friend.display_name ?? friend.email} class="h-full w-full object-cover" />
+                  <img src={friend.avatarUrl ?? friend.avatar_url} alt={friend.displayName ?? friend.display_name ?? friend.email} class="dm-conversation-list-avatar-image" />
                 {/if}
               </div>
-              <span class="truncate">{friend.displayName ?? friend.display_name ?? friend.email}</span>
+              <span class="dm-conversation-list-name">{friend.displayName ?? friend.display_name ?? friend.email}</span>
               <button
                 type="button"
-                class="ml-auto rounded p-1 text-muted-400 transition hover:bg-white/10 hover:text-slate-100"
+                class="dm-conversation-list-inline-button dm-conversation-list-inline-button-muted"
                 title="Remove friend"
                 on:click={() => removeRelation(friend.relationUuid ?? friend.relation_uuid ?? '')}
               >
@@ -204,25 +204,25 @@
         {/if}
 
         {#if onlineFriends.length === 0 && offlineFriends.length === 0}
-          <p class="px-2 py-2 text-sm text-muted-300">No friends yet.</p>
+          <p class="dm-conversation-list-state-copy">No friends yet.</p>
         {/if}
       </section>
 
-      <section class="mb-4">
-        <h3 class="mb-1 px-2 text-[11px] font-semibold uppercase tracking-[0.16em] text-muted-500">Pending</h3>
+      <section class="dm-conversation-list-section">
+        <h3 class="dm-conversation-list-section-title">Pending</h3>
 
         {#if $incomingFriendRequests.length === 0 && $outgoingFriendRequests.length === 0}
-          <p class="px-2 py-2 text-sm text-muted-300">No pending requests.</p>
+          <p class="dm-conversation-list-state-copy">No pending requests.</p>
         {/if}
 
         {#if $incomingFriendRequests.length > 0}
-          <p class="px-2 pb-1 text-[10px] uppercase tracking-[0.16em] text-emerald-300/80">Incoming</p>
+          <p class="dm-conversation-list-subsection dm-conversation-list-subsection-online">Incoming</p>
           {#each $incomingFriendRequests as request (request.uuid)}
-            <div class="mb-1 flex items-center gap-2 rounded-xl px-2.5 py-2 text-sm text-slate-100">
-              <span class="truncate">{request.user.displayName ?? request.user.display_name ?? request.user.email}</span>
+            <div class="dm-conversation-list-row dm-conversation-list-row-default">
+              <span class="dm-conversation-list-name">{request.user.displayName ?? request.user.display_name ?? request.user.email}</span>
               <button
                 type="button"
-                class="ml-auto rounded p-1 text-emerald-300 transition hover:bg-emerald-500/15"
+                class="dm-conversation-list-inline-button dm-conversation-list-inline-button-success"
                 on:click={() => acceptRequest(request.uuid)}
                 title="Accept"
               >
@@ -230,7 +230,7 @@
               </button>
               <button
                 type="button"
-                class="rounded p-1 text-red-300 transition hover:bg-red-500/15"
+                class="dm-conversation-list-inline-button dm-conversation-list-inline-button-danger"
                 on:click={() => declineRequest(request.uuid)}
                 title="Decline"
               >
@@ -241,13 +241,13 @@
         {/if}
 
         {#if $outgoingFriendRequests.length > 0}
-          <p class="px-2 pb-1 pt-1 text-[10px] uppercase tracking-[0.16em] text-muted-500">Outgoing</p>
+          <p class="dm-conversation-list-subsection dm-conversation-list-subsection-muted">Outgoing</p>
           {#each $outgoingFriendRequests as request (request.uuid)}
-            <div class="mb-1 flex items-center gap-2 rounded-xl px-2.5 py-2 text-sm text-muted-300">
-              <span class="truncate">{request.user.displayName ?? request.user.display_name ?? request.user.email}</span>
+            <div class="dm-conversation-list-row dm-conversation-list-row-muted">
+              <span class="dm-conversation-list-name">{request.user.displayName ?? request.user.display_name ?? request.user.email}</span>
               <button
                 type="button"
-                class="ml-auto rounded p-1 text-muted-300 transition hover:bg-white/10 hover:text-slate-100"
+                class="dm-conversation-list-inline-button dm-conversation-list-inline-button-muted"
                 on:click={() => removeRelation(request.uuid)}
                 title="Cancel request"
               >
@@ -259,32 +259,30 @@
       </section>
 
       <section>
-        <h3 class="mb-1 px-2 text-[11px] font-semibold uppercase tracking-[0.16em] text-muted-500">Direct Messages</h3>
+        <h3 class="dm-conversation-list-section-title">Direct Messages</h3>
         {#if $dmConversations.length === 0}
-          <p class="px-2 py-2 text-sm text-muted-300">No direct messages yet.</p>
+          <p class="dm-conversation-list-state-copy">No direct messages yet.</p>
         {:else}
           {#each $dmConversations as conversation (conversation.uuid)}
             <button
               type="button"
-              class={`mb-1 flex w-full items-center gap-2 rounded-xl px-2.5 py-2 text-left text-sm transition ${
-                $activeDMConversation?.uuid === conversation.uuid
-                  ? 'bg-white/10 text-slate-100'
-                  : 'text-muted-300 hover:bg-white/5 hover:text-slate-100'
-              }`}
+              class:dm-conversation-list-conversation-active={$activeDMConversation?.uuid === conversation.uuid}
+              class:dm-conversation-list-conversation-inactive={$activeDMConversation?.uuid !== conversation.uuid}
+              class="dm-conversation-list-row dm-conversation-list-row-button"
               on:click={() => selectConversation(conversation)}
             >
-              <div class="h-8 w-8 shrink-0 overflow-hidden rounded-full bg-surface-800">
+              <div class="dm-conversation-list-avatar">
                 {#if conversation.avatarUrl ?? conversation.avatar_url}
                   <img
                     src={conversation.avatarUrl ?? conversation.avatar_url}
                     alt={conversationName(conversation)}
-                    class="h-full w-full object-cover"
+                    class="dm-conversation-list-avatar-image"
                   />
                 {/if}
               </div>
-              <span class="truncate font-medium">{conversationName(conversation)}</span>
+              <span class="dm-conversation-list-name dm-conversation-list-name-strong">{conversationName(conversation)}</span>
               {#if unreadCount(conversation) > 0}
-                <span class="ml-auto rounded-pill bg-emerald-500/20 px-2 py-0.5 text-[11px] font-semibold text-emerald-200">
+                <span class="dm-conversation-list-unread-badge">
                   {unreadCount(conversation)}
                 </span>
               {/if}
@@ -294,7 +292,7 @@
       </section>
 
       {#if $friendsError}
-        <p class="mt-3 px-2 text-xs text-red-300">{$friendsError}</p>
+        <p class="dm-conversation-list-error">{$friendsError}</p>
       {/if}
     {/if}
   </div>
@@ -311,3 +309,109 @@
     on:submit={handleCreateConversation}
   />
 {/if}
+
+<style>
+  .dm-conversation-list-header {
+    @apply flex items-center justify-between px-4 py-3 text-xs font-semibold uppercase tracking-[0.16em] text-muted-500;
+  }
+
+  .dm-conversation-list-header-button {
+    @apply rounded-md p-1 text-muted-400 transition hover:bg-white/10 hover:text-slate-100;
+  }
+
+  .dm-conversation-list-body {
+    @apply min-h-0 flex-1 overflow-auto px-3 pb-3;
+  }
+
+  .dm-conversation-list-section {
+    @apply mb-4;
+  }
+
+  .dm-conversation-list-section-title {
+    @apply mb-1 px-2 text-[11px] font-semibold uppercase tracking-[0.16em] text-muted-500;
+  }
+
+  .dm-conversation-list-subsection {
+    @apply px-2 pb-1 text-[10px] uppercase tracking-[0.16em];
+  }
+
+  .dm-conversation-list-subsection-online {
+    @apply text-emerald-300/80;
+  }
+
+  .dm-conversation-list-subsection-muted {
+    @apply pt-1 text-muted-500;
+  }
+
+  .dm-conversation-list-state-copy {
+    @apply px-2 py-2 text-sm text-muted-300;
+  }
+
+  .dm-conversation-list-row {
+    @apply mb-1 flex items-center gap-2 rounded-xl px-2.5 py-2 text-sm;
+  }
+
+  .dm-conversation-list-row-button {
+    @apply w-full text-left transition;
+  }
+
+  .dm-conversation-list-row-online {
+    @apply text-muted-100 hover:bg-white/5;
+  }
+
+  .dm-conversation-list-row-muted {
+    @apply text-muted-300;
+  }
+
+  .dm-conversation-list-row-default {
+    @apply text-slate-100;
+  }
+
+  .dm-conversation-list-conversation-active {
+    @apply bg-white/10 text-slate-100;
+  }
+
+  .dm-conversation-list-conversation-inactive {
+    @apply text-muted-300 hover:bg-white/5 hover:text-slate-100;
+  }
+
+  .dm-conversation-list-avatar {
+    @apply h-8 w-8 shrink-0 overflow-hidden rounded-full bg-surface-800;
+  }
+
+  .dm-conversation-list-avatar-image {
+    @apply h-full w-full object-cover;
+  }
+
+  .dm-conversation-list-name {
+    @apply truncate;
+  }
+
+  .dm-conversation-list-name-strong {
+    @apply font-medium;
+  }
+
+  .dm-conversation-list-inline-button {
+    @apply ml-auto rounded p-1 transition;
+  }
+
+  .dm-conversation-list-inline-button-success {
+    @apply text-emerald-300 hover:bg-emerald-500/15;
+  }
+
+  .dm-conversation-list-inline-button-danger {
+    @apply text-red-300 hover:bg-red-500/15;
+  }
+
+  .dm-conversation-list-inline-button-muted {
+    @apply text-muted-300 hover:bg-white/10 hover:text-slate-100;
+  }
+
+  .dm-conversation-list-unread-badge {
+    @apply ml-auto rounded-pill bg-emerald-500/20 px-2 py-0.5 text-[11px] font-semibold text-emerald-200;
+  }
+
+  .dm-conversation-list-error {
+    @apply mt-3 px-2 text-xs text-red-300;
+  }
+</style>

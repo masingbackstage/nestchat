@@ -3,15 +3,34 @@ from datetime import timedelta
 from pathlib import Path
 
 import environ
+from django.core.exceptions import ImproperlyConfigured
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 
 env = environ.Env()
 
 ENV = env("ENV", default="development")
-SECRET_KEY = env("DJANGO_SECRET_KEY", default="unsafe-secret-key-for-nestchat")
 DEBUG = ENV == "development"
-ALLOWED_HOSTS = env.list("DJANGO_ALLOWED_HOSTS", default=["*"])
+
+
+def env_list(name, default=None):
+    default = [] if default is None else default
+    return [value for value in env.list(name, default=default) if value]
+
+
+SECRET_KEY = env("DJANGO_SECRET_KEY", default=None)
+if not SECRET_KEY:
+    if DEBUG:
+        SECRET_KEY = "unsafe-secret-key-for-nestchat"
+    else:
+        raise ImproperlyConfigured("DJANGO_SECRET_KEY must be set when ENV is production.")
+
+ALLOWED_HOSTS = env_list(
+    "DJANGO_ALLOWED_HOSTS",
+    default=["localhost", "127.0.0.1", "0.0.0.0", "testserver"] if DEBUG else [],
+)
+if not ALLOWED_HOSTS and not DEBUG:
+    raise ImproperlyConfigured("DJANGO_ALLOWED_HOSTS must be set when ENV is production.")
 
 INSTALLED_APPS = [
     "daphne",
@@ -33,7 +52,6 @@ INSTALLED_APPS = [
     "django_filters",
     "corsheaders",
     "drf_spectacular",
-    "debug_toolbar",
     "django_celery_beat",
     "src.apps.user",
     "src.apps.profile",
@@ -43,6 +61,8 @@ INSTALLED_APPS = [
     "src.apps.friends",
     "src.apps.gateway",
 ]
+if DEBUG:
+    INSTALLED_APPS.append("debug_toolbar")
 
 MIDDLEWARE = [
     "django.middleware.security.SecurityMiddleware",
@@ -50,12 +70,13 @@ MIDDLEWARE = [
     "corsheaders.middleware.CorsMiddleware",
     "django.middleware.common.CommonMiddleware",
     "django.middleware.csrf.CsrfViewMiddleware",
-    "debug_toolbar.middleware.DebugToolbarMiddleware",
     "django.contrib.auth.middleware.AuthenticationMiddleware",
     "django.contrib.messages.middleware.MessageMiddleware",
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
     "allauth.account.middleware.AccountMiddleware",
 ]
+if DEBUG:
+    MIDDLEWARE.insert(4, "debug_toolbar.middleware.DebugToolbarMiddleware")
 
 ROOT_URLCONF = "src.urls"
 WSGI_APPLICATION = "src.wsgi.application"
@@ -113,13 +134,68 @@ CELERY_TASK_SERIALIZER = "json"
 STATIC_URL = "/static/"
 STATIC_ROOT = "/backend/staticfiles"
 
-MEDIA_URL = "/media/"
 MEDIA_ROOT = "/backend/media"
+CORS_ALLOWED_ORIGINS = env_list(
+    "CORS_ALLOWED_ORIGINS",
+    default=["http://localhost:5173", "http://127.0.0.1:5173"] if DEBUG else [],
+)
+CSRF_TRUSTED_ORIGINS = env_list("CSRF_TRUSTED_ORIGINS", default=[])
 
-CORS_ALLOWED_ORIGINS = [
-    "http://localhost:5173",
-    "http://127.0.0.1:5173",
-]
+USE_S3_MEDIA = env.bool("USE_S3_MEDIA", default=False)
+AWS_STORAGE_BUCKET_NAME = env("AWS_STORAGE_BUCKET_NAME", default="")
+AWS_S3_REGION_NAME = env("AWS_S3_REGION_NAME", default="")
+AWS_S3_ENDPOINT_URL = env("AWS_S3_ENDPOINT_URL", default="")
+AWS_S3_CUSTOM_DOMAIN = env("AWS_S3_CUSTOM_DOMAIN", default="")
+AWS_ACCESS_KEY_ID = env("AWS_ACCESS_KEY_ID", default="")
+AWS_SECRET_ACCESS_KEY = env("AWS_SECRET_ACCESS_KEY", default="")
+AWS_DEFAULT_ACL = None
+AWS_QUERYSTRING_AUTH = False
+AWS_S3_FILE_OVERWRITE = False
+AWS_S3_SIGNATURE_VERSION = env("AWS_S3_SIGNATURE_VERSION", default="s3v4")
+AWS_S3_ADDRESSING_STYLE = env("AWS_S3_ADDRESSING_STYLE", default="path")
+
+if USE_S3_MEDIA:
+    missing_storage_vars = [
+        name
+        for name, value in (
+            ("AWS_STORAGE_BUCKET_NAME", AWS_STORAGE_BUCKET_NAME),
+            ("AWS_S3_REGION_NAME", AWS_S3_REGION_NAME),
+            ("AWS_S3_ENDPOINT_URL", AWS_S3_ENDPOINT_URL),
+            ("AWS_ACCESS_KEY_ID", AWS_ACCESS_KEY_ID),
+            ("AWS_SECRET_ACCESS_KEY", AWS_SECRET_ACCESS_KEY),
+        )
+        if not value
+    ]
+    if missing_storage_vars:
+        raise ImproperlyConfigured(
+            "Missing S3 media configuration: " + ", ".join(missing_storage_vars)
+        )
+
+    STORAGES = {
+        "default": {
+            "BACKEND": "storages.backends.s3.S3Storage",
+            "OPTIONS": {
+                "bucket_name": AWS_STORAGE_BUCKET_NAME,
+                "region_name": AWS_S3_REGION_NAME,
+                "endpoint_url": AWS_S3_ENDPOINT_URL,
+                "default_acl": AWS_DEFAULT_ACL,
+                "querystring_auth": AWS_QUERYSTRING_AUTH,
+                "file_overwrite": AWS_S3_FILE_OVERWRITE,
+                "custom_domain": AWS_S3_CUSTOM_DOMAIN or None,
+            },
+        },
+        "staticfiles": {
+            "BACKEND": "django.contrib.staticfiles.storage.StaticFilesStorage",
+        },
+    }
+    if AWS_S3_CUSTOM_DOMAIN:
+        MEDIA_URL = f"https://{AWS_S3_CUSTOM_DOMAIN.rstrip('/')}/"
+    else:
+        MEDIA_URL = (
+            f"{AWS_S3_ENDPOINT_URL.rstrip('/')}/{AWS_STORAGE_BUCKET_NAME.rstrip('/')}/"
+        )
+else:
+    MEDIA_URL = "/media/"
 
 REST_FRAMEWORK = {
     "DEFAULT_SCHEMA_CLASS": "drf_spectacular.openapi.AutoSchema",
@@ -189,6 +265,17 @@ ACCOUNT_EMAIL_VERIFICATION = "optional"
 EMAIL_BACKEND = "django.core.mail.backends.console.EmailBackend"
 ACCOUNT_USER_MODEL_USERNAME_FIELD = None
 ACCOUNT_USERNAME_REQUIRED = False
+
+SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
+USE_X_FORWARDED_HOST = True
+SECURE_SSL_REDIRECT = env.bool("DJANGO_SECURE_SSL_REDIRECT", default=not DEBUG)
+SESSION_COOKIE_SECURE = env.bool("SESSION_COOKIE_SECURE", default=not DEBUG)
+CSRF_COOKIE_SECURE = env.bool("CSRF_COOKIE_SECURE", default=not DEBUG)
+SECURE_HSTS_SECONDS = env.int("SECURE_HSTS_SECONDS", default=31536000 if not DEBUG else 0)
+SECURE_HSTS_INCLUDE_SUBDOMAINS = env.bool(
+    "SECURE_HSTS_INCLUDE_SUBDOMAINS", default=not DEBUG
+)
+SECURE_HSTS_PRELOAD = env.bool("SECURE_HSTS_PRELOAD", default=not DEBUG)
 
 AUTH_PASSWORD_VALIDATORS = [
     {

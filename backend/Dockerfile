@@ -19,8 +19,8 @@ RUN apt-get update -q && apt-get install -yq \
 
 RUN pip install --root-user-action=ignore --upgrade pip poetry
 
-# Kopiujemy najpierw sam plik konfiguracyjny (optymalizacja cache Dockera)
-COPY pyproject.toml ./
+# Kopiujemy najpierw pliki zależności (optymalizacja cache Dockera)
+COPY pyproject.toml poetry.lock ./
 
 RUN if [ "$ENV" = 'development' ]; then \
       poetry install --no-interaction --no-ansi --no-root; \
@@ -42,4 +42,3 @@ COPY . /backend
 FROM build as production
 COPY . /backend
 CMD ["gunicorn", "src.asgi:application", "-k", "uvicorn.workers.UvicornWorker", "-b", "0.0.0.0:8000"]
-

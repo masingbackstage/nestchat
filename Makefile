@@ -10,7 +10,7 @@ DOCKER_EXEC = $(DOCKER_COMPOSE) exec $(BACKEND_CONTAINER)
 
 DJANGO_MANAGE = python manage.py
 
-.PHONY: build up up-build migrate migrations backend-bash django-shell format superuser restart-celery static test test-chat-gateway
+.PHONY: build up up-build migrate migrations backend-bash django-shell format superuser restart-celery static test test-chat-gateway prod-up prod-logs
 
 build:
 	$(DOCKER_COMPOSE) build
@@ -68,3 +68,9 @@ restart-celery:
 
 logs:
 	$(DOCKER_COMPOSE) logs -f $(BACKEND_CONTAINER) $(CELERY_CONTAINER)
+
+prod-up:
+	docker compose --env-file .env.prod -f docker-compose.prod.yml up -d --build
+
+prod-logs:
+	docker compose --env-file .env.prod -f docker-compose.prod.yml logs -f caddy backend celery

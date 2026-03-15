@@ -1,4 +1,5 @@
 import { authFetch } from '../../lib/auth';
+import { getApiBaseUrl } from '../../lib/url';
 import type { Channel, CreateChannelRequest } from '../../types/gateway';
 
 function pick<T>(
@@ -25,12 +26,7 @@ export async function createChannel(
   serverUuid: string,
   data: CreateChannelRequest,
 ): Promise<Channel> {
-  const baseUrl = import.meta.env.VITE_API_URL;
-  if (!baseUrl) {
-    throw new Error('Missing VITE_API_URL.');
-  }
-
-  const response = await authFetch(`${baseUrl}/servers/${serverUuid}/channels/`, {
+  const response = await authFetch(`${getApiBaseUrl()}/servers/${serverUuid}/channels/`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',

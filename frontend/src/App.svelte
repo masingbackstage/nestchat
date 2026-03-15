@@ -10,6 +10,7 @@
   } from './lib/auth';
   import { pushToast } from './lib/stores/toast';
   import { toApiAbsoluteUrl } from './lib/url';
+  import { createGatewayEventHandler } from './app/gateway';
   import { servers } from './lib/stores/servers';
   import { activeChannel, activeDMConversation, activeServer } from './lib/stores/ui';
   import {
@@ -38,22 +39,14 @@
     ensureServerMembers,
     resetMembersState,
     updateServerMemberPresence,
-  } from './modules/servers/members/store';
-  import type {
-    GatewayMessageEvent,
-    Message,
-    PresenceMembersChangedPayload,
-    PresenceStatusChangedPayload,
-    Server,
-  } from './types/gateway';
-  import LoginForm from './modules/auth/LoginForm.svelte';
-  import RegisterForm from './modules/auth/RegisterForm.svelte';
-  import SettingsModal from './modules/auth/SettingsModal.svelte';
+  } from './modules/servers/members';
+  import type { Server } from './types/gateway';
+  import { LoginForm, RegisterForm, SettingsModal } from './modules/auth';
   import LandingPage from './modules/landing/LandingPage.svelte';
-  import ServerList from './modules/servers/list/ServerList.svelte';
-  import ChannelList from './modules/channels/ChannelList.svelte';
+  import ServerList from './modules/servers/list';
+  import ChannelList from './modules/channels';
   import ChatWindow from './modules/chat/window';
-  import MemberSidebar from './modules/servers/members/MemberSidebar.svelte';
+  import MemberSidebar from './modules/servers/members';
   import ToastViewport from './modules/shared/ToastViewport.svelte';
   import {
     addDMMessage,
@@ -62,21 +55,21 @@
     ensureDMConversations,
     ensureDMMessages,
     incrementDMUnread,
+    loadFriendsData,
     resetDMState,
+    resetFriendsState,
     softDeleteDMMessage,
     updateDMConversationPreview,
     updateDMMessage,
-  } from './modules/dm/dm.store';
-  import type { DMMessage } from './types/gateway';
-  import DMWindow from './modules/dm/DMWindow.svelte';
-  import { loadFriendsData, resetFriendsState } from './modules/dm/friends.store';
+  } from './modules/dm';
+  import { DMWindow } from './modules/dm';
 
   let unsubscribeGateway: (() => void) | null = null;
   let unsubscribeGatewayReconnect: (() => void) | null = null;
   const EMPTY_CHANNEL_MARKER = '__empty__';
   const READ_STATE_TTL_MS = 30_000;
-  const lastReadMarkerByChannel: Record<string, string | undefined> = {};
-  const readStateFetchedAtByChannel: Record<string, number | undefined> = {};
+  let lastReadMarkerByChannel: Record<string, string | undefined> = {};
+  let readStateFetchedAtByChannel: Record<string, number | undefined> = {};
   let isBootstrapping = true;
   let isAuthenticated = false;
   let isSettingsOpen = false;
@@ -110,12 +103,8 @@
   }
 
   function clearReadStateCache(): void {
-    for (const key of Object.keys(lastReadMarkerByChannel)) {
-      delete lastReadMarkerByChannel[key];
-    }
-    for (const key of Object.keys(readStateFetchedAtByChannel)) {
-      delete readStateFetchedAtByChannel[key];
-    }
+    lastReadMarkerByChannel = {};
+    readStateFetchedAtByChannel = {};
   }
 
   function tearDownGatewaySubscriptions(): void {
@@ -143,204 +132,24 @@
     navigate('/app', 'login');
   }
 
-  function handleGatewayEvent(event: GatewayMessageEvent): void {
-    const moduleName = String(event.module ?? '').toLowerCase();
-    const actionName = String(event.action ?? '').toLowerCase();
-
-    if (moduleName === 'system' && actionName === 'error') {
-      const payload = event.payload as { code?: string; detail?: string };
-      if (payload.code === 'permission_denied' || payload.code === 'not_found') {
-        pushToast({
-          type: 'error',
-          message: payload.detail ?? 'Channel permission error.',
-        });
-      }
-      return;
-    }
-
-    if (moduleName === 'presence' && actionName === 'status_changed') {
-      const payload = event.payload as PresenceStatusChangedPayload;
-      const serverUuid = payload.serverUuid ?? payload.server_uuid;
-      const memberUuid = payload.memberUuid ?? payload.member_uuid;
-      if (!serverUuid || !memberUuid) {
-        return;
-      }
-      const knownMember = updateServerMemberPresence(
-        serverUuid,
-        memberUuid,
-        Boolean(payload.isOnline ?? payload.is_online ?? false),
-      );
-      if (!knownMember) {
-        void ensureServerMembers(serverUuid, true);
-      }
-      return;
-    }
-
-    if (moduleName === 'presence' && actionName === 'members_changed') {
-      const payload = event.payload as PresenceMembersChangedPayload;
-      const serverUuid = payload.serverUuid ?? payload.server_uuid;
-      if (!serverUuid) {
-        return;
-      }
-      void ensureServerMembers(serverUuid, true);
-      return;
-    }
-
-    if (moduleName !== 'chat') {
-      return;
-    }
-
-    const payload = event.payload as {
-      uuid?: string;
-      id?: string;
-      channel_id?: string;
-      channel_uuid?: string;
-      channelUuid?: string;
-      conversation_uuid?: string;
-      conversationUuid?: string;
-      content: string;
-      author: string;
-      author_uuid?: string;
-      author_profile_display_name?: string;
-      authorProfileDisplayName?: string;
-      avatar_url?: string | null;
-      avatarUrl?: string | null;
-      is_deleted?: boolean;
-      isDeleted?: boolean;
-      is_edited?: boolean;
-      isEdited?: boolean;
-      edited_at?: string | null;
-      editedAt?: string | null;
-      reactions?: Array<{
-        emoji: string;
-        count: number;
-        reacted_by_me?: boolean;
-        reactedByMe?: boolean;
-      }>;
-      updated_at?: string;
-      updatedAt?: string;
-      created_at?: string;
-      createdAt?: string;
-      client_id?: string;
-      clientId?: string;
-    };
-    const channelUuid = payload.channel_id ?? payload.channel_uuid ?? payload.channelUuid;
-    const mappedReactions = (payload.reactions ?? []).map((reaction) => ({
-      emoji: reaction.emoji,
-      count: Number(reaction.count ?? 0),
-      reacted_by_me: Boolean(reaction.reactedByMe ?? reaction.reacted_by_me ?? false),
-    }));
-
-    if (actionName === 'new_message') {
-      if (!channelUuid) {
-        return;
-      }
-
-      const message: Message = {
-        uuid: payload.id ?? payload.uuid ?? '',
-        channel_uuid: channelUuid,
-        content: payload.content,
-        author:
-          payload.authorProfileDisplayName ?? payload.author_profile_display_name ?? payload.author,
-        avatar_url: toApiAbsoluteUrl(payload.avatarUrl ?? payload.avatar_url ?? null),
-        author_uuid: payload.author_uuid ?? (payload.author ? String(payload.author) : undefined),
-        is_deleted: Boolean(payload.isDeleted ?? payload.is_deleted ?? false),
-        is_edited: Boolean(payload.isEdited ?? payload.is_edited ?? false),
-        edited_at: payload.editedAt ?? payload.edited_at ?? null,
-        reactions: mappedReactions,
-        created_at: payload.createdAt ?? payload.created_at ?? new Date().toISOString(),
-        updated_at: payload.updatedAt ?? payload.updated_at,
-        client_id: payload.client_id ?? payload.clientId,
-      };
-
-      addMessage(message);
-      if ($activeChannel?.uuid !== channelUuid) {
-        incrementUnreadCount(channelUuid);
-      }
-      return;
-    }
-
-    if (
-      (actionName === 'dm_new_message' ||
-        actionName === 'dm_message_updated' ||
-        actionName === 'dm_message_deleted' ||
-        actionName === 'dm_message_reactions_updated') &&
-      (payload.conversation_uuid ?? payload.conversationUuid)
-    ) {
-      const dmConversationUuid = payload.conversation_uuid ?? payload.conversationUuid ?? '';
-      const message: DMMessage = {
-        uuid: payload.uuid ?? payload.id ?? '',
-        conversation_uuid: dmConversationUuid,
-        channel_uuid: dmConversationUuid,
-        content: payload.content ?? '',
-        author:
-          payload.authorProfileDisplayName ??
-          payload.author_profile_display_name ??
-          String(payload.author ?? ''),
-        avatar_url: toApiAbsoluteUrl(payload.avatarUrl ?? payload.avatar_url ?? null),
-        author_uuid: payload.author ? String(payload.author) : undefined,
-        is_deleted: Boolean(payload.isDeleted ?? payload.is_deleted ?? false),
-        is_edited: Boolean(payload.isEdited ?? payload.is_edited ?? false),
-        edited_at: payload.editedAt ?? payload.edited_at ?? null,
-        reactions: mappedReactions,
-        created_at: payload.createdAt ?? payload.created_at,
-        updated_at: payload.updatedAt ?? payload.updated_at,
-        ciphertext: null,
-        nonce: null,
-        encryption_version: null,
-        sender_key_id: null,
-        client_id: payload.client_id ?? payload.clientId,
-      };
-
-      if (actionName === 'dm_new_message') {
-        addDMMessage(message);
-        updateDMConversationPreview(dmConversationUuid, message);
-        if ($activeDMConversation?.uuid !== dmConversationUuid) {
-          incrementDMUnread(dmConversationUuid);
-        } else {
-          clearDMUnread(dmConversationUuid);
-        }
-      } else if (actionName === 'dm_message_deleted') {
-        softDeleteDMMessage(message);
-        updateDMConversationPreview(dmConversationUuid, message);
-      } else {
-        updateDMMessage(message);
-        updateDMConversationPreview(dmConversationUuid, message);
-      }
-      return;
-    }
-
-    if (
-      (actionName === 'message_updated' ||
-        actionName === 'message_deleted' ||
-        actionName === 'message_reactions_updated') &&
-      channelUuid
-    ) {
-      const message: Message = {
-        uuid: payload.uuid ?? payload.id ?? '',
-        channel_uuid: channelUuid,
-        content: payload.content ?? '',
-        author:
-          payload.authorProfileDisplayName ??
-          payload.author_profile_display_name ??
-          String(payload.author ?? ''),
-        avatar_url: toApiAbsoluteUrl(payload.avatarUrl ?? payload.avatar_url ?? null),
-        author_uuid: payload.author ? String(payload.author) : undefined,
-        is_deleted: Boolean(payload.isDeleted ?? payload.is_deleted ?? false),
-        is_edited: Boolean(payload.isEdited ?? payload.is_edited ?? false),
-        edited_at: payload.editedAt ?? payload.edited_at ?? null,
-        reactions: mappedReactions,
-        created_at: payload.createdAt ?? payload.created_at,
-        updated_at: payload.updatedAt ?? payload.updated_at,
-      };
-
-      if (actionName === 'message_deleted') {
-        softDeleteMessage(message);
-      } else {
-        updateMessage(message);
-      }
-    }
-  }
+  const handleGatewayEvent = createGatewayEventHandler({
+    toApiAbsoluteUrl,
+    pushToast,
+    ensureServerMembers,
+    updateServerMemberPresence,
+    addMessage,
+    incrementUnreadCount,
+    softDeleteMessage,
+    updateMessage,
+    addDMMessage,
+    updateDMMessage,
+    softDeleteDMMessage,
+    updateDMConversationPreview,
+    incrementDMUnread,
+    clearDMUnread,
+    getActiveChannelUuid: () => $activeChannel?.uuid ?? null,
+    getActiveDMConversationUuid: () => $activeDMConversation?.uuid ?? null,
+  });
 
   async function resyncAfterReconnect(): Promise<void> {
     const channels = Object.keys($messagesByChannel);

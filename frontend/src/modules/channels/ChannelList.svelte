@@ -3,10 +3,10 @@
   import { servers } from '../../lib/stores/servers';
   import { pushToast } from '../../lib/stores/toast';
   import { activeServer, activeChannel } from '../../lib/stores/ui';
-  import { createChannel } from './channels.api';
+  import { createChannel } from './api';
   import CreateChannelModal from './CreateChannelModal.svelte';
   import { unreadCountByChannel } from '../chat/messages';
-  import DMConversationList from '../dm/DMConversationList.svelte';
+  import { DMConversationList } from '../dm';
   import type { Channel } from '../../types/gateway';
 
   let isCreateModalOpen = false;
@@ -80,41 +80,33 @@
   }
 </script>
 
-<nav class="glass-panel flex w-[280px] shrink-0 flex-col overflow-hidden rounded-panel" aria-label="Channels">
+<nav class="glass-panel channel-list" aria-label="Channels">
   {#if $activeServer}
-    <header class="flex h-16 items-center border-b border-white/10 px-4">
-      <span class="truncate text-lg font-semibold text-slate-100">{$activeServer.name}</span>
+    <header class="channel-list-header">
+      <span class="channel-list-title">{$activeServer.name}</span>
     </header>
 
-    <div class="app-scrollbar flex min-h-0 flex-1 flex-col gap-5 overflow-auto px-3 py-3">
+    <div class="app-scrollbar channel-list-body">
       <section>
-        <h3
-          class="mb-1.5 px-2 text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-500"
-        >
-          Text channels
-        </h3>
+        <h3 class="channel-list-section-title">Text channels</h3>
         {#each $activeServer.channels.filter((c) => !isVoiceChannel(c)) as channel}
           <button
             type="button"
-            class={`mb-0.5 flex w-full items-center gap-2 rounded-xl px-2.5 py-2 text-left text-sm transition ${
-              $activeChannel?.uuid === channel.uuid
-                ? 'bg-white/10 text-slate-100'
-                : 'text-muted-300 hover:bg-white/5 hover:text-slate-100'
-            }`}
+            class:channel-list-button-active={$activeChannel?.uuid === channel.uuid}
+            class:channel-list-button-inactive={$activeChannel?.uuid !== channel.uuid}
+            class="channel-list-button"
             on:click={() => selectChannel(channel)}
           >
             {#if channel.channelEmoji ?? channel.channel_emoji}
-              <span aria-hidden="true" class="text-muted-400">
+              <span aria-hidden="true" class="channel-list-emoji">
                 {channel.channelEmoji ?? channel.channel_emoji}
               </span>
             {:else}
-              <span aria-hidden="true" class="text-muted-500">#</span>
+              <span aria-hidden="true" class="channel-list-fallback">#</span>
             {/if}
-            <span class="truncate font-medium">{channel.name}</span>
+            <span class="channel-list-name">{channel.name}</span>
             {#if ($unreadCountByChannel[channel.uuid] ?? 0) > 0}
-              <span
-                class="ml-auto rounded-pill bg-emerald-500/20 px-2 py-0.5 text-[11px] font-semibold text-emerald-200"
-              >
+              <span class="channel-list-unread-badge">
                 {$unreadCountByChannel[channel.uuid]}
               </span>
             {/if}
@@ -123,46 +115,37 @@
       </section>
 
       <section>
-        <h3
-          class="mb-1.5 px-2 text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-500"
-        >
-          Voice channels
-        </h3>
+        <h3 class="channel-list-section-title">Voice channels</h3>
         {#each $activeServer.channels.filter((c) => isVoiceChannel(c)) as channel}
           <button
             type="button"
-            class={`mb-0.5 flex w-full items-center gap-2 rounded-xl px-2.5 py-2 text-left text-sm transition ${
-              $activeChannel?.uuid === channel.uuid
-                ? 'bg-white/10 text-slate-100'
-                : 'text-muted-300 hover:bg-white/5 hover:text-slate-100'
-            }`}
+            class:channel-list-button-active={$activeChannel?.uuid === channel.uuid}
+            class:channel-list-button-inactive={$activeChannel?.uuid !== channel.uuid}
+            class="channel-list-button"
             on:click={() => selectChannel(channel)}
           >
             <Volume2 aria-hidden="true" class="h-4 w-4 shrink-0 text-muted-500" />
             {#if channel.channelEmoji ?? channel.channel_emoji}
-              <span aria-hidden="true" class="text-muted-400">
+              <span aria-hidden="true" class="channel-list-emoji">
                 {channel.channelEmoji ?? channel.channel_emoji}
               </span>
             {/if}
-            <span class="truncate font-medium">{channel.name}</span>
+            <span class="channel-list-name">{channel.name}</span>
             {#if ($unreadCountByChannel[channel.uuid] ?? 0) > 0}
-              <span
-                class="ml-auto rounded-pill bg-emerald-500/20 px-2 py-0.5 text-[11px] font-semibold text-emerald-200"
-              >
+              <span class="channel-list-unread-badge">
                 {$unreadCountByChannel[channel.uuid]}
               </span>
             {/if}
           </button>
         {/each}
       </section>
-
     </div>
 
     {#if canCreateChannels()}
-      <div class="mt-auto border-t border-white/10 px-3 py-3">
+      <div class="channel-list-footer">
         <button
           type="button"
-          class="mb-0.5 flex w-full items-center gap-2 rounded-xl px-2.5 py-2 text-left text-sm text-muted-300 transition hover:bg-white/5 hover:text-slate-100"
+          class="channel-list-button channel-list-button-inactive"
           on:click={() => {
             isCreateModalOpen = true;
           }}
@@ -170,7 +153,7 @@
           title="Create channel"
         >
           <Plus aria-hidden="true" class="h-4 w-4 shrink-0 text-muted-500" />
-          <span class="truncate font-medium">Create channel</span>
+          <span class="channel-list-name">Create channel</span>
         </button>
       </div>
     {/if}
@@ -190,3 +173,57 @@
     on:submit={handleCreateChannelSubmit}
   />
 {/if}
+
+<style>
+  .channel-list {
+    @apply flex w-[280px] shrink-0 flex-col overflow-hidden rounded-panel;
+  }
+
+  .channel-list-header {
+    @apply flex h-16 items-center border-b border-white/10 px-4;
+  }
+
+  .channel-list-title {
+    @apply truncate text-lg font-semibold text-slate-100;
+  }
+
+  .channel-list-body {
+    @apply flex min-h-0 flex-1 flex-col gap-5 overflow-auto px-3 py-3;
+  }
+
+  .channel-list-section-title {
+    @apply mb-1.5 px-2 text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-500;
+  }
+
+  .channel-list-button {
+    @apply mb-0.5 flex w-full items-center gap-2 rounded-xl px-2.5 py-2 text-left text-sm transition;
+  }
+
+  .channel-list-button-active {
+    @apply bg-white/10 text-slate-100;
+  }
+
+  .channel-list-button-inactive {
+    @apply text-muted-300 hover:bg-white/5 hover:text-slate-100;
+  }
+
+  .channel-list-emoji {
+    @apply text-muted-400;
+  }
+
+  .channel-list-fallback {
+    @apply text-muted-500;
+  }
+
+  .channel-list-name {
+    @apply truncate font-medium;
+  }
+
+  .channel-list-unread-badge {
+    @apply ml-auto rounded-pill bg-emerald-500/20 px-2 py-0.5 text-[11px] font-semibold text-emerald-200;
+  }
+
+  .channel-list-footer {
+    @apply mt-auto border-t border-white/10 px-3 py-3;
+  }
+</style>

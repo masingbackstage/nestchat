@@ -1,9 +1,9 @@
 <script lang="ts">
   import { onMount, tick } from 'svelte';
   import { Bell, MessagesSquare, Search, Users } from 'lucide-svelte';
-  import { getCurrentUserUuid } from '../../lib/auth';
-  import { pushToast } from '../../lib/stores/toast';
-  import { activeDMConversation } from '../../lib/stores/ui';
+  import { getCurrentUserUuid } from '../../../lib/auth';
+  import { pushToast } from '../../../lib/stores/toast';
+  import { activeDMConversation } from '../../../lib/stores/ui';
   import {
     clearDMUnread,
     dmMessagesByConversation,
@@ -12,10 +12,10 @@
     loadNewerDMMessages,
     loadOlderDMMessages,
     markDMConversationAsRead,
-  } from './dm.store';
-  import { sendDeleteDMMessage, sendEditDMMessage, sendToggleDMReaction } from '../../lib/socket';
-  import MessageItem from '../chat/message-item';
-  import DMMessageInput from './DMMessageInput.svelte';
+  } from '../messages';
+  import { sendDeleteDMMessage, sendEditDMMessage, sendToggleDMReaction } from '../../../lib/socket';
+  import MessageItem from '../../chat/message-item';
+  import { DMMessageInput } from '../message-input';
 
   let messagesContainer: HTMLDivElement | null = null;
   let currentUserUuid: string | null = null;
@@ -107,37 +107,37 @@
   }
 </script>
 
-<section class="glass-panel flex min-w-0 flex-1 flex-col rounded-panel" aria-label="Direct messages">
-  <header class="flex h-16 items-center border-b border-white/10 px-5">
+<section class="glass-panel dm-window" aria-label="Direct messages">
+  <header class="dm-window-header">
     {#if $activeDMConversation}
       <MessagesSquare class="h-5 w-5 text-muted-400" aria-hidden="true" />
-      <h2 class="truncate text-lg font-semibold text-slate-100">{conversationTitle()}</h2>
+      <h2 class="dm-window-title">{conversationTitle()}</h2>
     {:else}
-      <h2 class="text-lg font-semibold text-slate-100">Select a conversation</h2>
+      <h2 class="dm-window-title">Select a conversation</h2>
     {/if}
 
-    <div class="ml-auto hidden items-center gap-4 text-muted-300 md:flex">
-      <button type="button" class="rounded p-1.5 transition hover:bg-white/10 hover:text-slate-100" aria-label="Notifications">
+    <div class="dm-window-actions">
+      <button type="button" class="dm-window-icon-button" aria-label="Notifications">
         <Bell class="h-4 w-4" />
       </button>
-      <button type="button" class="rounded p-1.5 transition hover:bg-white/10 hover:text-slate-100" aria-label="Members">
+      <button type="button" class="dm-window-icon-button" aria-label="Members">
         <Users class="h-4 w-4" />
       </button>
-      <div class="flex items-center gap-2 rounded-xl border border-white/10 bg-white/5 px-2.5 py-1.5">
-        <input type="text" readonly value="" placeholder="Search" class="w-24 bg-transparent text-xs text-muted-200 outline-none placeholder:text-muted-500" />
+      <div class="dm-window-search">
+        <input type="text" readonly value="" placeholder="Search" class="dm-window-search-input" />
         <Search class="h-3.5 w-3.5 text-muted-400" />
       </div>
     </div>
   </header>
 
-  <div class="flex min-h-0 flex-1 flex-col">
-    <div class="app-scrollbar chat-messages-scroll flex-1 space-y-1 overflow-auto px-4 py-4" bind:this={messagesContainer} on:scroll={handleScroll}>
+  <div class="dm-window-body">
+    <div class="app-scrollbar chat-messages-scroll dm-window-messages" bind:this={messagesContainer} on:scroll={handleScroll}>
       {#if !$activeDMConversation}
-        <p class="text-sm text-muted-300">Select or create a direct message to start chatting.</p>
+        <p class="dm-window-state-copy">Select or create a direct message to start chatting.</p>
       {:else if queryState?.isLoadingInitial && currentMessages.length === 0}
-        <p class="text-sm text-muted-300">Loading messages...</p>
+        <p class="dm-window-state-copy">Loading messages...</p>
       {:else if currentMessages.length === 0}
-        <p class="text-sm text-muted-300">No messages yet. Start the conversation.</p>
+        <p class="dm-window-state-copy">No messages yet. Start the conversation.</p>
       {:else}
         {#each currentMessages as message (message.uuid)}
           <MessageItem
@@ -155,3 +155,45 @@
     <DMMessageInput conversation={$activeDMConversation} />
   </div>
 </section>
+
+<style>
+  .dm-window {
+    @apply flex min-w-0 flex-1 flex-col rounded-panel;
+  }
+
+  .dm-window-header {
+    @apply flex h-16 items-center border-b border-white/10 px-5;
+  }
+
+  .dm-window-title {
+    @apply truncate text-lg font-semibold text-slate-100;
+  }
+
+  .dm-window-actions {
+    @apply ml-auto hidden items-center gap-4 text-muted-300 md:flex;
+  }
+
+  .dm-window-icon-button {
+    @apply rounded p-1.5 transition hover:bg-white/10 hover:text-slate-100;
+  }
+
+  .dm-window-search {
+    @apply flex items-center gap-2 rounded-xl border border-white/10 bg-white/5 px-2.5 py-1.5;
+  }
+
+  .dm-window-search-input {
+    @apply w-24 bg-transparent text-xs text-muted-200 outline-none placeholder:text-muted-500;
+  }
+
+  .dm-window-body {
+    @apply flex min-h-0 flex-1 flex-col;
+  }
+
+  .dm-window-messages {
+    @apply flex-1 space-y-1 overflow-auto px-4 py-4;
+  }
+
+  .dm-window-state-copy {
+    @apply text-sm text-muted-300;
+  }
+</style>

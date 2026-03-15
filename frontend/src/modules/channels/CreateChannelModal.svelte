@@ -1,8 +1,7 @@
 <script lang="ts">
-  import { onDestroy } from 'svelte';
   import { createEventDispatcher } from 'svelte';
   import { fade, scale } from 'svelte/transition';
-  import { UNICODE_EMOJI_PICKER } from '../../lib/emoji';
+  import ChannelEmojiPicker from './ChannelEmojiPicker.svelte';
 
   export let isSubmitting = false;
 
@@ -19,17 +18,9 @@
 
   let name = '';
   let channelEmoji = '';
-  let isEmojiPickerOpen = false;
-  let emojiSearch = '';
-  let channelEmojiPickerRoot: HTMLDivElement | null = null;
   let channelType: 'TEXT' | 'VOICE' = 'TEXT';
   let topic = '';
   let isPublic = true;
-  $: normalizedEmojiSearch = emojiSearch.trim().toLowerCase();
-  $: filteredChannelEmojis =
-    normalizedEmojiSearch.length === 0
-      ? UNICODE_EMOJI_PICKER
-      : UNICODE_EMOJI_PICKER.filter((emoji) => emoji.includes(normalizedEmojiSearch));
 
   function requestClose(): void {
     if (isSubmitting) {
@@ -65,54 +56,30 @@
     });
   }
 
-  function pickChannelEmoji(emoji: string): void {
-    channelEmoji = emoji;
-    isEmojiPickerOpen = false;
-    emojiSearch = '';
-  }
-
-  function handleDocumentPointerDown(event: PointerEvent): void {
-    if (!isEmojiPickerOpen || !channelEmojiPickerRoot) {
-      return;
-    }
-    const target = event.target;
-    if (!(target instanceof Node)) {
-      return;
-    }
-    if (channelEmojiPickerRoot.contains(target)) {
-      return;
-    }
-    isEmojiPickerOpen = false;
-  }
-
-  document.addEventListener('pointerdown', handleDocumentPointerDown, true);
-  onDestroy(() => {
-    document.removeEventListener('pointerdown', handleDocumentPointerDown, true);
-  });
 </script>
 
 <svelte:window on:keydown={handleWindowKeydown} />
 
 <div
-  class="fixed inset-0 z-[80] flex items-center justify-center bg-surface-950/80 px-4 backdrop-blur-sm"
+  class="create-channel-modal-overlay"
   role="presentation"
   on:pointerdown={handleOverlayPointerDown}
   in:fade={{ duration: 150 }}
   out:fade={{ duration: 130 }}
 >
   <div
-    class="glass-panel-strong w-full max-w-md rounded-[1.1rem] p-5"
+    class="glass-panel-strong create-channel-modal"
     role="dialog"
     aria-modal="true"
     in:scale={{ duration: 180, start: 0.96 }}
     out:scale={{ duration: 140, start: 1 }}
   >
     <form on:submit|preventDefault={submit}>
-      <div class="mb-4 flex items-center justify-between">
-        <h2 class="text-lg font-semibold text-slate-100">Create channel</h2>
+      <div class="create-channel-modal-header">
+        <h2 class="create-channel-modal-title">Create channel</h2>
         <button
           type="button"
-          class="rounded-lg border border-white/15 px-2 py-1 text-xs text-muted-200 transition hover:border-glass-highlight hover:text-slate-100"
+          class="create-channel-modal-close-button"
           on:click={requestClose}
           disabled={isSubmitting}
         >
@@ -120,102 +87,49 @@
         </button>
       </div>
 
-      <div class="space-y-3">
-        <label class="block text-sm text-muted-100">
+      <div class="create-channel-modal-fields">
+        <label class="create-channel-modal-label">
           Name
           <input
             bind:value={name}
             type="text"
-            class="mt-1 w-full rounded-xl border border-white/15 bg-white/5 px-3 py-2 text-sm text-slate-100 outline-none transition placeholder:text-muted-500 focus:border-accent-400"
+            class="create-channel-modal-input"
             placeholder="general"
             required
           />
         </label>
 
-        <label class="block text-sm text-muted-100">
+        <label class="create-channel-modal-label">
           Channel emoji (optional)
-          <div class="relative mt-1" bind:this={channelEmojiPickerRoot}>
-            <button
-              type="button"
-              class="flex w-full items-center justify-between rounded-xl border border-white/15 bg-white/5 px-3 py-2 text-sm text-slate-100 transition hover:border-glass-highlight"
-              on:click={() => {
-                isEmojiPickerOpen = !isEmojiPickerOpen;
-                if (!isEmojiPickerOpen) {
-                  emojiSearch = '';
-                }
-              }}
-            >
-              <span>{channelEmoji || 'Choose emoji'}</span>
-              <span class="text-muted-400">▾</span>
-            </button>
-            {#if isEmojiPickerOpen}
-              <div
-                class="absolute z-20 mt-1 w-full rounded-xl border border-white/15 bg-surface-900 p-2 shadow-lg"
-              >
-                <input
-                  type="text"
-                  bind:value={emojiSearch}
-                  placeholder="Search emoji..."
-                  class="mb-2 w-full rounded-md border border-white/15 bg-white/5 px-2 py-1 text-xs text-slate-100 outline-none placeholder:text-muted-500 focus:border-accent-400"
-                />
-                <div class="app-scrollbar mb-2 grid max-h-56 grid-cols-8 gap-1 overflow-auto pr-1">
-                  {#each filteredChannelEmojis as emoji (emoji)}
-                    <button
-                      type="button"
-                      class="rounded px-1 py-1 text-lg transition hover:bg-white/10"
-                      on:click={() => pickChannelEmoji(emoji)}
-                      title={emoji}
-                      aria-label={emoji}
-                    >
-                      {emoji}
-                    </button>
-                  {/each}
-                </div>
-                {#if filteredChannelEmojis.length === 0}
-                  <p class="mb-2 text-center text-xs text-muted-400">No emoji found.</p>
-                {/if}
-                <button
-                  type="button"
-                  class="w-full rounded border border-white/15 px-2 py-1 text-xs text-muted-200 transition hover:border-glass-highlight"
-                  on:click={() => {
-                    channelEmoji = '';
-                    isEmojiPickerOpen = false;
-                    emojiSearch = '';
-                  }}
-                >
-                  Clear
-                </button>
-              </div>
-            {/if}
-          </div>
+          <ChannelEmojiPicker bind:value={channelEmoji} disabled={isSubmitting} />
         </label>
 
-        <label class="block text-sm text-muted-100">
+        <label class="create-channel-modal-label">
           Channel type
           <select
             bind:value={channelType}
-            class="mt-1 w-full rounded-xl border border-white/15 bg-surface-900 px-3 py-2 text-sm text-slate-100 outline-none transition focus:border-accent-400"
+            class="create-channel-modal-select"
           >
             <option value="TEXT">TEXT</option>
             <option value="VOICE">VOICE</option>
           </select>
         </label>
 
-        <label class="block text-sm text-muted-100">
+        <label class="create-channel-modal-label">
           Topic (optional)
           <input
             bind:value={topic}
             type="text"
-            class="mt-1 w-full rounded-xl border border-white/15 bg-white/5 px-3 py-2 text-sm text-slate-100 outline-none transition placeholder:text-muted-500 focus:border-accent-400"
+            class="create-channel-modal-input"
             placeholder="Channel description"
           />
         </label>
 
-        <label class="block text-sm text-muted-100">
+        <label class="create-channel-modal-label">
           Visibility
           <select
             bind:value={isPublic}
-            class="mt-1 w-full rounded-xl border border-white/15 bg-surface-900 px-3 py-2 text-sm text-slate-100 outline-none transition focus:border-accent-400"
+            class="create-channel-modal-select"
           >
             <option value={true}>Public</option>
             <option value={false}>Private</option>
@@ -223,17 +137,17 @@
         </label>
       </div>
 
-      <div class="mt-5 flex gap-2">
+      <div class="create-channel-modal-actions">
         <button
           type="submit"
-          class="flex-1 rounded-xl bg-accent-500 px-4 py-2 text-sm font-medium text-white transition hover:bg-accent-400 disabled:cursor-not-allowed disabled:bg-surface-800"
+          class="create-channel-modal-button create-channel-modal-button-primary"
           disabled={isSubmitting || !name.trim()}
         >
           {isSubmitting ? 'Creating...' : 'Create'}
         </button>
         <button
           type="button"
-          class="rounded-xl border border-white/15 px-4 py-2 text-sm text-muted-200 transition hover:border-glass-highlight hover:text-slate-100"
+          class="create-channel-modal-button create-channel-modal-button-secondary"
           on:click={requestClose}
           disabled={isSubmitting}
         >
@@ -243,3 +157,57 @@
     </form>
   </div>
 </div>
+
+<style>
+  .create-channel-modal-overlay {
+    @apply fixed inset-0 z-[80] flex items-center justify-center bg-surface-950/80 px-4 backdrop-blur-sm;
+  }
+
+  .create-channel-modal {
+    @apply w-full max-w-md rounded-[1.1rem] p-5;
+  }
+
+  .create-channel-modal-header {
+    @apply mb-4 flex items-center justify-between;
+  }
+
+  .create-channel-modal-title {
+    @apply text-lg font-semibold text-slate-100;
+  }
+
+  .create-channel-modal-close-button {
+    @apply rounded-lg border border-white/15 px-2 py-1 text-xs text-muted-200 transition hover:border-glass-highlight hover:text-slate-100 disabled:cursor-not-allowed disabled:opacity-60;
+  }
+
+  .create-channel-modal-fields {
+    @apply space-y-3;
+  }
+
+  .create-channel-modal-label {
+    @apply block text-sm text-muted-100;
+  }
+
+  .create-channel-modal-input {
+    @apply mt-1 w-full rounded-xl border border-white/15 bg-white/5 px-3 py-2 text-sm text-slate-100 outline-none transition placeholder:text-muted-500 focus:border-accent-400;
+  }
+
+  .create-channel-modal-select {
+    @apply mt-1 w-full rounded-xl border border-white/15 bg-surface-900 px-3 py-2 text-sm text-slate-100 outline-none transition focus:border-accent-400;
+  }
+
+  .create-channel-modal-actions {
+    @apply mt-5 flex gap-2;
+  }
+
+  .create-channel-modal-button {
+    @apply rounded-xl px-4 py-2 text-sm transition disabled:cursor-not-allowed disabled:opacity-60;
+  }
+
+  .create-channel-modal-button-primary {
+    @apply flex-1 bg-accent-500 font-medium text-white hover:bg-accent-400 disabled:bg-surface-800;
+  }
+
+  .create-channel-modal-button-secondary {
+    @apply border border-white/15 text-muted-200 hover:border-glass-highlight hover:text-slate-100;
+  }
+</style>

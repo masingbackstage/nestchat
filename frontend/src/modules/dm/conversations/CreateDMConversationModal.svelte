@@ -1,8 +1,8 @@
 <script lang="ts">
   import { createEventDispatcher, onDestroy, onMount } from 'svelte';
   import { Search, X } from 'lucide-svelte';
-  import { searchUsers } from './friends.store';
-  import type { UserSearchResult } from '../../types/gateway';
+  import { searchUsers } from '../friends';
+  import type { UserSearchResult } from '../../../types/gateway';
 
   type SubmitPayload = {
     participantUuids: string[];
@@ -121,32 +121,28 @@
   });
 </script>
 
-<div class="fixed inset-0 z-[70] flex items-center justify-center bg-black/55 px-4 py-6">
+<div class="dm-create-modal-overlay">
   <button
     type="button"
     aria-label="Close create conversation modal"
-    class="absolute inset-0 cursor-default bg-transparent"
+    class="dm-create-modal-backdrop"
     on:click={closeModal}
     disabled={isSubmitting}
   ></button>
-  <section class="glass-panel glass-panel-strong relative z-10 w-full max-w-lg rounded-2xl p-5">
-    <h2 class="text-lg font-semibold text-slate-100">New conversation</h2>
-    <p class="mt-1 text-sm text-muted-300">Search users by email, tag or display name.</p>
+  <section class="glass-panel glass-panel-strong dm-create-modal">
+    <h2 class="dm-create-modal-title">New conversation</h2>
+    <p class="dm-create-modal-copy">Search users by email, tag or display name.</p>
 
     {#if error}
-      <p
-        class="mt-3 rounded-xl border border-red-400/50 bg-red-500/10 px-3 py-2 text-sm text-red-200"
-      >
-        {error}
-      </p>
+      <p class="dm-create-modal-error">{error}</p>
     {/if}
 
-    <div class="mt-4 space-y-3">
-      <label class="flex flex-col gap-1.5 text-sm text-slate-200">
+    <div class="dm-create-modal-fields">
+      <label class="dm-create-modal-field">
         <span>Type</span>
         <select
           bind:value={mode}
-          class="rounded-xl border border-white/15 bg-surface-850 px-3 py-2 text-slate-100 outline-none"
+          class="dm-create-modal-select"
           disabled={isSubmitting}
         >
           <option value="direct">Direct (1:1)</option>
@@ -155,80 +151,76 @@
       </label>
 
       {#if mode === 'group'}
-        <label class="flex flex-col gap-1.5 text-sm text-slate-200">
+        <label class="dm-create-modal-field">
           <span>Title (optional)</span>
           <input
             type="text"
             bind:value={title}
             maxlength="120"
             placeholder="Project squad"
-            class="rounded-xl border border-white/15 bg-surface-850 px-3 py-2 text-slate-100 outline-none placeholder:text-muted-500"
+            class="dm-create-modal-input"
             disabled={isSubmitting}
           />
         </label>
       {/if}
 
-      <label class="flex flex-col gap-1.5 text-sm text-slate-200">
+      <label class="dm-create-modal-field">
         <span>Recipients</span>
-        <div class="rounded-xl border border-white/15 bg-surface-850 px-3 py-2">
-          <div class="mb-2 flex flex-wrap gap-1.5">
+        <div class="dm-create-modal-recipient-box">
+          <div class="dm-create-modal-chips">
             {#each selectedUsers as user (user.uuid)}
-              <span
-                class="inline-flex items-center gap-1 rounded-full border border-white/15 bg-white/10 px-2 py-1 text-xs text-slate-100"
-              >
+              <span class="dm-create-modal-chip">
                 {user.displayName ?? user.display_name ?? user.email}
                 <button
                   type="button"
-                  class="rounded p-0.5 text-muted-300 hover:bg-white/10 hover:text-slate-100"
+                  class="dm-create-modal-chip-button"
                   on:click={() => removeUser(user.uuid)}
                   aria-label="Remove recipient"
                 >
                   <X class="h-3.5 w-3.5" />
                 </button>
               </span>
-            {/each}
+          {/each}
           </div>
 
-          <div class="relative">
+          <div class="dm-create-modal-search">
             <Search class="pointer-events-none absolute left-2 top-2.5 h-4 w-4 text-muted-500" />
             <input
               type="text"
               bind:value={query}
               placeholder="Type at least 2 characters..."
-              class="w-full rounded-lg border border-white/10 bg-surface-900 py-2 pl-8 pr-2 text-sm text-slate-100 outline-none placeholder:text-muted-500"
+              class="dm-create-modal-search-input"
               disabled={isSubmitting}
             />
           </div>
 
           {#if query.trim().length >= 2}
-            <div
-              class="app-scrollbar mt-2 max-h-44 overflow-auto rounded-lg border border-white/10 bg-surface-900"
-            >
+            <div class="app-scrollbar dm-create-modal-results">
               {#if isSearching}
-                <p class="px-3 py-2 text-xs text-muted-400">Searching...</p>
+                <p class="dm-create-modal-results-copy">Searching...</p>
               {:else if searchResults.length === 0}
-                <p class="px-3 py-2 text-xs text-muted-400">No users found.</p>
+                <p class="dm-create-modal-results-copy">No users found.</p>
               {:else}
                 {#each searchResults as user (user.uuid)}
                   <button
                     type="button"
-                    class="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-slate-100 transition hover:bg-white/10"
+                    class="dm-create-modal-result"
                     on:click={() => selectUser(user)}
                   >
-                    <div class="h-7 w-7 shrink-0 overflow-hidden rounded-full bg-surface-800">
+                    <div class="dm-create-modal-result-avatar">
                       {#if user.avatarUrl ?? user.avatar_url}
                         <img
                           src={user.avatarUrl ?? user.avatar_url}
                           alt={user.displayName ?? user.display_name ?? user.email}
-                          class="h-full w-full object-cover"
+                          class="dm-create-modal-result-avatar-image"
                         />
                       {/if}
                     </div>
-                    <div class="min-w-0">
-                      <p class="truncate text-sm">
+                    <div class="dm-create-modal-result-content">
+                      <p class="dm-create-modal-result-name">
                         {user.displayName ?? user.display_name ?? user.email}
                       </p>
-                      <p class="truncate text-xs text-muted-400">{user.email}</p>
+                      <p class="dm-create-modal-result-email">{user.email}</p>
                     </div>
                   </button>
                 {/each}
@@ -239,10 +231,10 @@
       </label>
     </div>
 
-    <div class="mt-5 flex items-center justify-end gap-2">
+    <div class="dm-create-modal-actions">
       <button
         type="button"
-        class="rounded-xl border border-white/15 px-4 py-2 text-sm text-muted-200 transition hover:bg-white/10"
+        class="dm-create-modal-button dm-create-modal-button-secondary"
         on:click={closeModal}
         disabled={isSubmitting}
       >
@@ -250,7 +242,7 @@
       </button>
       <button
         type="button"
-        class="rounded-xl bg-accent-500 px-4 py-2 text-sm font-semibold text-white transition hover:bg-accent-400 disabled:cursor-not-allowed disabled:opacity-70"
+        class="dm-create-modal-button dm-create-modal-button-primary"
         on:click={validateAndSubmit}
         disabled={isSubmitting}
       >
@@ -259,3 +251,117 @@
     </div>
   </section>
 </div>
+
+<style>
+  .dm-create-modal-overlay {
+    @apply fixed inset-0 z-[70] flex items-center justify-center bg-black/55 px-4 py-6;
+  }
+
+  .dm-create-modal-backdrop {
+    @apply absolute inset-0 cursor-default bg-transparent;
+  }
+
+  .dm-create-modal {
+    @apply relative z-10 w-full max-w-lg rounded-2xl p-5;
+  }
+
+  .dm-create-modal-title {
+    @apply text-lg font-semibold text-slate-100;
+  }
+
+  .dm-create-modal-copy {
+    @apply mt-1 text-sm text-muted-300;
+  }
+
+  .dm-create-modal-error {
+    @apply mt-3 rounded-xl border border-red-400/50 bg-red-500/10 px-3 py-2 text-sm text-red-200;
+  }
+
+  .dm-create-modal-fields {
+    @apply mt-4 space-y-3;
+  }
+
+  .dm-create-modal-field {
+    @apply flex flex-col gap-1.5 text-sm text-slate-200;
+  }
+
+  .dm-create-modal-input {
+    @apply rounded-xl border border-white/15 bg-surface-850 px-3 py-2 text-slate-100 outline-none placeholder:text-muted-500;
+  }
+
+  .dm-create-modal-select {
+    @apply rounded-xl border border-white/15 bg-surface-850 px-3 py-2 text-slate-100 outline-none;
+  }
+
+  .dm-create-modal-recipient-box {
+    @apply rounded-xl border border-white/15 bg-surface-850 px-3 py-2;
+  }
+
+  .dm-create-modal-chips {
+    @apply mb-2 flex flex-wrap gap-1.5;
+  }
+
+  .dm-create-modal-chip {
+    @apply inline-flex items-center gap-1 rounded-full border border-white/15 bg-white/10 px-2 py-1 text-xs text-slate-100;
+  }
+
+  .dm-create-modal-chip-button {
+    @apply rounded p-0.5 text-muted-300 hover:bg-white/10 hover:text-slate-100;
+  }
+
+  .dm-create-modal-search {
+    @apply relative;
+  }
+
+  .dm-create-modal-search-input {
+    @apply w-full rounded-lg border border-white/10 bg-surface-900 py-2 pl-8 pr-2 text-sm text-slate-100 outline-none placeholder:text-muted-500;
+  }
+
+  .dm-create-modal-results {
+    @apply mt-2 max-h-44 overflow-auto rounded-lg border border-white/10 bg-surface-900;
+  }
+
+  .dm-create-modal-results-copy {
+    @apply px-3 py-2 text-xs text-muted-400;
+  }
+
+  .dm-create-modal-result {
+    @apply flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-slate-100 transition hover:bg-white/10;
+  }
+
+  .dm-create-modal-result-avatar {
+    @apply h-7 w-7 shrink-0 overflow-hidden rounded-full bg-surface-800;
+  }
+
+  .dm-create-modal-result-avatar-image {
+    @apply h-full w-full object-cover;
+  }
+
+  .dm-create-modal-result-content {
+    @apply min-w-0;
+  }
+
+  .dm-create-modal-result-name {
+    @apply truncate text-sm;
+  }
+
+  .dm-create-modal-result-email {
+    @apply truncate text-xs text-muted-400;
+  }
+
+  .dm-create-modal-actions {
+    @apply mt-5 flex items-center justify-end gap-2;
+  }
+
+  .dm-create-modal-button {
+    @apply rounded-xl px-4 py-2 text-sm transition;
+  }
+
+  .dm-create-modal-button-secondary {
+    @apply border border-white/15 text-muted-200 hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-60;
+  }
+
+  .dm-create-modal-button-primary {
+    @apply bg-accent-500 font-semibold text-white hover:bg-accent-400 disabled:cursor-not-allowed disabled:opacity-70;
+  }
+</style>

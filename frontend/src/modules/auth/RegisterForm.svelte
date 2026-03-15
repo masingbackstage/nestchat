@@ -2,6 +2,7 @@
   import { createEventDispatcher } from 'svelte';
   import { ArrowRight, UserPlus } from 'lucide-svelte';
   import { loginWithPassword } from '../../lib/auth';
+  import { registerWithPassword } from './api';
 
   const dispatch = createEventDispatcher<{ authenticated: undefined; switchToLogin: undefined }>();
 
@@ -37,52 +38,14 @@
     isSubmitting = true;
     error = '';
 
-    const baseUrl = import.meta.env.VITE_API_URL;
-    if (!baseUrl) {
-      error = 'Missing VITE_API_URL.';
-      isSubmitting = false;
-      return;
-    }
-
-    const response = await fetch(`${baseUrl}/auth/registration/`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        email: trimmedEmail,
-        password1: password,
-        password2: confirmPassword,
-        displayName: trimmedDisplayName,
-      }),
+    const registrationResult = await registerWithPassword({
+      email: trimmedEmail,
+      password,
+      confirmPassword,
+      displayName: trimmedDisplayName,
     });
-
-    if (!response.ok) {
-      try {
-        const payload = (await response.json()) as Record<string, string[] | string>;
-        const preferredKeys = [
-          'password1',
-          'password2',
-          'email',
-          'displayName',
-          'display_name',
-          'nonFieldErrors',
-          'non_field_errors',
-          'detail',
-        ];
-        const firstEntry =
-          preferredKeys.map((key) => payload[key]).find((value) => value !== undefined) ??
-          Object.values(payload)[0];
-        if (Array.isArray(firstEntry) && firstEntry.length > 0) {
-          error = firstEntry[0] ?? 'Registration failed.';
-        } else if (typeof firstEntry === 'string') {
-          error = firstEntry;
-        } else {
-          error = `HTTP ${response.status}`;
-        }
-      } catch {
-        error = `HTTP ${response.status}`;
-      }
+    if (!registrationResult.ok) {
+      error = registrationResult.error;
       isSubmitting = false;
       return;
     }
@@ -99,76 +62,70 @@
   }
 </script>
 
-<div class="app-shell flex items-center justify-center px-4">
-  <div class="ambient-blob left-[-14%] top-[-10%] h-[460px] w-[460px] bg-accent-500/20"></div>
-  <div class="ambient-blob right-[-10%] top-[10%] h-[420px] w-[420px] bg-indigo-500/20"></div>
-  <form class="glass-panel w-full max-w-sm rounded-[1.1rem] p-6" on:submit|preventDefault={submit}>
-    <div class="mb-4 flex items-center gap-2">
-      <div
-        class="flex h-8 w-8 items-center justify-center rounded-lg bg-accent-500/20 text-accent-300"
-      >
+<div class="app-shell auth-shell">
+  <div class="ambient-blob auth-blob-left"></div>
+  <div class="ambient-blob auth-blob-right"></div>
+  <form class="glass-panel auth-card" on:submit|preventDefault={submit}>
+    <div class="auth-header">
+      <div class="auth-icon-badge">
         <UserPlus class="h-4 w-4" />
       </div>
-      <h1 class="text-xl font-semibold text-slate-100">Sign up</h1>
+      <h1 class="auth-title">Sign up</h1>
     </div>
-    <p class="mb-5 text-sm text-muted-200">Create an account to start using NestChat.</p>
+    <p class="auth-copy">Create an account to start using NestChat.</p>
 
     {#if error}
-      <p
-        class="mb-4 rounded-xl border border-red-500/40 bg-red-500/10 px-3 py-2 text-xs text-red-300"
-      >
-        {error}
-      </p>
+      <p class="auth-error">{error}</p>
     {/if}
 
-    <label class="mb-3 block text-sm text-muted-100">
+    <label class="auth-field">
       Email
       <input
         type="email"
         autocomplete="email"
         bind:value={email}
-        class="mt-1 w-full rounded-xl border border-white/15 bg-white/5 px-3 py-2 text-sm text-slate-100 outline-none transition placeholder:text-muted-500 focus:border-accent-400"
+        class="auth-input"
         placeholder="you@example.com"
         required
       />
     </label>
 
-    <label class="mb-3 block text-sm text-muted-100">
+    <label class="auth-field">
       Display name (optional)
       <input
         type="text"
         autocomplete="nickname"
         bind:value={displayName}
-        class="mt-1 w-full rounded-xl border border-white/15 bg-white/5 px-3 py-2 text-sm text-slate-100 outline-none transition placeholder:text-muted-500 focus:border-accent-400"
+        class="auth-input"
         placeholder="Twoja nazwa"
       />
     </label>
 
-    <label class="mb-3 block text-sm text-muted-100">
+    <label class="auth-field">
       Password
       <input
         type="password"
         autocomplete="new-password"
         bind:value={password}
-        class="mt-1 w-full rounded-xl border border-white/15 bg-white/5 px-3 py-2 text-sm text-slate-100 outline-none transition placeholder:text-muted-500 focus:border-accent-400"
+        class="auth-input"
         placeholder="••••••••"
         required
       />
     </label>
 
-    <label class="mb-5 block text-sm text-muted-100">
+    <label class="auth-field auth-field-spaced">
       Confirm password
       <input
         type="password"
         autocomplete="new-password"
         bind:value={confirmPassword}
-        class="mt-1 w-full rounded-xl border border-white/15 bg-white/5 px-3 py-2 text-sm text-slate-100 outline-none transition placeholder:text-muted-500 focus:border-accent-400"
+        class="auth-input"
         placeholder="••••••••"
         required
       />
     </label>
 
-    <ul class="mb-5 space-y-1 rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-xs">
+    <ul class="auth-requirements">
       <li class={requirementClass(hasMinLength)}>• Minimum 10 characters</li>
       <li class={requirementClass(hasLower)}>• At least one lowercase letter (a-z)</li>
       <li class={requirementClass(hasUpper)}>• At least one uppercase letter (A-Z)</li>
@@ -179,7 +136,7 @@
     <button
       type="submit"
       disabled={isSubmitting || !email.trim() || !password || !confirmPassword}
-      class="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-accent-500 px-4 py-2 text-sm font-medium text-white transition hover:bg-accent-400 disabled:cursor-not-allowed disabled:bg-surface-800"
+      class="auth-button auth-button-primary"
     >
       {#if isSubmitting}
         Creating account...
@@ -191,10 +148,76 @@
 
     <button
       type="button"
-      class="mt-3 w-full rounded-xl border border-white/15 px-4 py-2 text-sm font-medium text-muted-200 transition hover:border-glass-highlight hover:text-slate-100"
+      class="auth-button auth-button-secondary"
       on:click={() => dispatch('switchToLogin')}
     >
       Already have an account?
     </button>
   </form>
 </div>
+
+<style>
+  .auth-shell {
+    @apply flex items-center justify-center px-4;
+  }
+
+  .auth-blob-left {
+    @apply left-[-14%] top-[-10%] h-[460px] w-[460px] bg-accent-500/20;
+  }
+
+  .auth-blob-right {
+    @apply right-[-10%] top-[10%] h-[420px] w-[420px] bg-indigo-500/20;
+  }
+
+  .auth-card {
+    @apply w-full max-w-sm rounded-[1.1rem] p-6;
+  }
+
+  .auth-header {
+    @apply mb-4 flex items-center gap-2;
+  }
+
+  .auth-icon-badge {
+    @apply flex h-8 w-8 items-center justify-center rounded-lg bg-accent-500/20 text-accent-300;
+  }
+
+  .auth-title {
+    @apply text-xl font-semibold text-slate-100;
+  }
+
+  .auth-copy {
+    @apply mb-5 text-sm text-muted-200;
+  }
+
+  .auth-error {
+    @apply mb-4 rounded-xl border border-red-500/40 bg-red-500/10 px-3 py-2 text-xs text-red-300;
+  }
+
+  .auth-field {
+    @apply mb-3 block text-sm text-muted-100;
+  }
+
+  .auth-field-spaced {
+    @apply mb-5;
+  }
+
+  .auth-input {
+    @apply mt-1 w-full rounded-xl border border-white/15 bg-white/5 px-3 py-2 text-sm text-slate-100 outline-none transition placeholder:text-muted-500 focus:border-accent-400;
+  }
+
+  .auth-requirements {
+    @apply mb-5 space-y-1 rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-xs;
+  }
+
+  .auth-button {
+    @apply w-full rounded-xl px-4 py-2 text-sm font-medium transition;
+  }
+
+  .auth-button-primary {
+    @apply inline-flex items-center justify-center gap-2 bg-accent-500 text-white hover:bg-accent-400 disabled:cursor-not-allowed disabled:bg-surface-800;
+  }
+
+  .auth-button-secondary {
+    @apply mt-3 border border-white/15 text-muted-200 hover:border-glass-highlight hover:text-slate-100;
+  }
+</style>
