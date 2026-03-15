@@ -8,8 +8,7 @@
 {$API_DOMAIN} {
 	encode zstd gzip
 
-	@static path /static/*
-	handle_path @static {
+	handle_path /static/* {
 		root * /srv/backend-static
 		file_server
 	}
