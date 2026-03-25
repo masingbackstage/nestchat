@@ -150,7 +150,7 @@ class VoiceTokenRequestSerializer(serializers.Serializer):
 
 class VoiceTokenResponseSerializer(serializers.Serializer):
     token = serializers.CharField()
-    livekit_url = serializers.CharField()
+    livekit_public_url = serializers.CharField()
     room_name = serializers.CharField()
     identity = serializers.CharField()
     expires_in = serializers.IntegerField(min_value=1)
