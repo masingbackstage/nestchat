@@ -306,9 +306,11 @@ USE_I18N = True
 USE_TZ = True
 
 LIVEKIT_URL = env("LIVEKIT_URL", default="")
+LIVEKIT_PUBLIC_URL = env("LIVEKIT_PUBLIC_URL", default="")
 LIVEKIT_API_KEY = env("LIVEKIT_API_KEY", default="")
 LIVEKIT_API_SECRET = env("LIVEKIT_API_SECRET", default="")
 LIVEKIT_TOKEN_TTL_SECONDS = env.int("LIVEKIT_TOKEN_TTL_SECONDS", default=600)
+
 
 
 if ENV == "production":
