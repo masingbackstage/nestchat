@@ -1,8 +1,8 @@
 from rest_framework import serializers
 
 from .models.channel import Channel
-from .models.server_emoji import ServerEmoji
 from .models.server import Server
+from .models.server_emoji import ServerEmoji
 
 
 class ChannelShortSerializer(serializers.ModelSerializer):
@@ -137,3 +137,20 @@ class ServerMembersGroupSerializer(serializers.Serializer):
 
 class ServerMembersResponseSerializer(serializers.Serializer):
     groups = ServerMembersGroupSerializer(many=True)
+
+
+class VoiceTokenRequestSerializer(serializers.Serializer):
+    channel_uuid = serializers.UUIDField()
+    client_session_id = serializers.CharField(
+        max_length=64,
+        required=False,
+        allow_blank=True,
+    )
+
+
+class VoiceTokenResponseSerializer(serializers.Serializer):
+    token = serializers.CharField()
+    livekit_url = serializers.CharField()
+    room_name = serializers.CharField()
+    identity = serializers.CharField()
+    expires_in = serializers.IntegerField(min_value=1)

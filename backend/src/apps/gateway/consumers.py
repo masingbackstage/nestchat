@@ -728,7 +728,9 @@ class GatewayConsumer(AsyncWebsocketConsumer):
 
     @database_sync_to_async
     def save_dm_message(self, conversation, content):
-        message = DMMessage.objects.create(conversation=conversation, author=self.user, content=content)
+        message = DMMessage.objects.create(
+            conversation=conversation, author=self.user, content=content
+        )
         conversation.updated_at = timezone.now()
         conversation.save(update_fields=["updated_at"])
         return message

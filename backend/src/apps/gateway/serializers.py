@@ -135,7 +135,9 @@ class GatewayRequestSerializer(serializers.Serializer):
                 if not conversation_serializer.is_valid():
                     raise serializers.ValidationError({"payload": conversation_serializer.errors})
                 data["payload"] = {
-                    "conversation_uuid": conversation_serializer.validated_data["conversation_uuid"],
+                    "conversation_uuid": conversation_serializer.validated_data[
+                        "conversation_uuid"
+                    ],
                     **content_serializer.validated_data,
                 }
             elif action == ChatAction.EDIT_DM_MESSAGE:

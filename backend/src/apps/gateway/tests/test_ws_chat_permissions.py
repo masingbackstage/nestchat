@@ -306,7 +306,9 @@ def test_ws_send_dm_message_echoes_client_id():
     assert str(event["module"]).lower() == "chat"
     assert event["action"] == "dm_new_message"
     assert event["payload"]["client_id"] == "dm-client-123"
-    assert DMMessage.objects.filter(conversation=conversation, content="hello dm client").count() == 1
+    assert (
+        DMMessage.objects.filter(conversation=conversation, content="hello dm client").count() == 1
+    )
 
 
 @pytest.mark.django_db(transaction=True)

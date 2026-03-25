@@ -1,11 +1,16 @@
+from datetime import timedelta
+
+from django.conf import settings
 from django.db import models
 from django.shortcuts import get_object_or_404
+from livekit import api
 from rest_framework import status, viewsets
 from rest_framework.decorators import action
-from rest_framework.exceptions import PermissionDenied, ValidationError
+from rest_framework.exceptions import APIException, PermissionDenied, ValidationError
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 
+from src.apps.server.enums import ChannelType
 from src.apps.server.models import Channel, Role, Server, ServerEmoji
 from src.apps.server.serializers import (
     ChannelCreateSerializer,
@@ -14,6 +19,8 @@ from src.apps.server.serializers import (
     ServerEmojiSerializer,
     ServerListSerializer,
     ServerMembersResponseSerializer,
+    VoiceTokenRequestSerializer,
+    VoiceTokenResponseSerializer,
 )
 
 
@@ -197,3 +204,69 @@ class ServerViewSet(viewsets.ReadOnlyModelViewSet):
 
         response_serializer = ServerMembersResponseSerializer({"groups": groups})
         return Response(response_serializer.data)
+
+    @action(detail=True, methods=["post"], url_path="voice-token")
+    def voice_token(self, request, uuid=None):
+        server = get_object_or_404(Server, uuid=uuid)
+        if not self.has_server_access(request.user, server):
+            raise PermissionDenied("You do not have access to this server.")
+
+        req = VoiceTokenRequestSerializer(data=request.data)
+        req.is_valid(raise_exception=True)
+        channel_uuid = req.validated_data["channel_uuid"]
+
+        channel = get_object_or_404(
+            Channel.objects.prefetch_related("allowed_roles"),
+            uuid=channel_uuid,
+            server=server,
+        )
+
+        if channel.channel_type != ChannelType.VOICE:
+            raise ValidationError({"channel_uuid": "Channel is not a voice channel."})
+
+        if not channel.is_public and server.owner_id != request.user.pk:
+            member = (
+                server.server_members.filter(user=request.user).prefetch_related("roles").first()
+            )
+            if not member:
+                raise PermissionDenied("You do not have access to this voice channel.")
+
+            member_role_ids = set(member.roles.values_list("uuid", flat=True))
+            allowed_role_ids = set(channel.allowed_roles.values_list("uuid", flat=True))
+            if allowed_role_ids and member_role_ids.isdisjoint(allowed_role_ids):
+                raise PermissionDenied("You do not have access to this voice channel.")
+
+        if (
+            not settings.LIVEKIT_URL
+            or not settings.LIVEKIT_API_KEY
+            or not settings.LIVEKIT_API_SECRET
+        ):
+            raise APIException("Voice service is not configured.")
+
+        room_name = f"server:{server.uuid}:channel:{channel.uuid}"
+        identity = str(request.user.uuid)
+
+        grants = api.VideoGrants(
+            room_join=True,
+            room=room_name,
+            can_publish=True,
+            can_subscribe=True,
+        )
+
+        token = (
+            api.AccessToken(settings.LIVEKIT_API_KEY, settings.LIVEKIT_API_SECRET)
+            .with_identity(identity)
+            .with_name(identity)
+            .with_ttl(timedelta(seconds=settings.LIVEKIT_TOKEN_TTL_SECONDS))
+            .with_grants(grants)
+            .to_jwt()
+        )
+
+        payload = {
+            "token": token,
+            "livekit_url": settings.LIVEKIT_URL,
+            "room_name": room_name,
+            "identity": identity,
+            "expires_in": settings.LIVEKIT_TOKEN_TTL_SECONDS,
+        }
+        return Response(VoiceTokenResponseSerializer(payload).data, status=status.HTTP_200_OK)

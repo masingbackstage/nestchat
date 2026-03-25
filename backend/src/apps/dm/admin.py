@@ -1,6 +1,11 @@
 from django.contrib import admin
 
-from src.apps.dm.models import DMConversation, DMConversationParticipant, DMMessage, DMMessageReaction
+from src.apps.dm.models import (
+    DMConversation,
+    DMConversationParticipant,
+    DMMessage,
+    DMMessageReaction,
+)
 
 
 @admin.register(DMConversation)

@@ -148,12 +148,8 @@ AWS_S3_ENDPOINT_URL = env("AWS_S3_ENDPOINT_URL", default="")
 AWS_S3_CUSTOM_DOMAIN = env("AWS_S3_CUSTOM_DOMAIN", default="")
 AWS_ACCESS_KEY_ID = env("AWS_ACCESS_KEY_ID", default="")
 AWS_SECRET_ACCESS_KEY = env("AWS_SECRET_ACCESS_KEY", default="")
-AWS_REQUEST_CHECKSUM_CALCULATION = env(
-    "AWS_REQUEST_CHECKSUM_CALCULATION", default="when_required"
-)
-AWS_RESPONSE_CHECKSUM_VALIDATION = env(
-    "AWS_RESPONSE_CHECKSUM_VALIDATION", default="when_required"
-)
+AWS_REQUEST_CHECKSUM_CALCULATION = env("AWS_REQUEST_CHECKSUM_CALCULATION", default="when_required")
+AWS_RESPONSE_CHECKSUM_VALIDATION = env("AWS_RESPONSE_CHECKSUM_VALIDATION", default="when_required")
 AWS_DEFAULT_ACL = None
 AWS_QUERYSTRING_AUTH = False
 AWS_S3_FILE_OVERWRITE = False
@@ -180,12 +176,8 @@ if USE_S3_MEDIA:
     # S3-compatible providers like OCI Object Storage can reject the newer
     # boto3 default checksum behavior introduced in 1.36+, so we keep the
     # pre-1.36 request/response behavior unless the environment overrides it.
-    os.environ.setdefault(
-        "AWS_REQUEST_CHECKSUM_CALCULATION", AWS_REQUEST_CHECKSUM_CALCULATION
-    )
-    os.environ.setdefault(
-        "AWS_RESPONSE_CHECKSUM_VALIDATION", AWS_RESPONSE_CHECKSUM_VALIDATION
-    )
+    os.environ.setdefault("AWS_REQUEST_CHECKSUM_CALCULATION", AWS_REQUEST_CHECKSUM_CALCULATION)
+    os.environ.setdefault("AWS_RESPONSE_CHECKSUM_VALIDATION", AWS_RESPONSE_CHECKSUM_VALIDATION)
 
     STORAGES = {
         "default": {
@@ -207,9 +199,7 @@ if USE_S3_MEDIA:
     if AWS_S3_CUSTOM_DOMAIN:
         MEDIA_URL = f"https://{AWS_S3_CUSTOM_DOMAIN.rstrip('/')}/"
     else:
-        MEDIA_URL = (
-            f"{AWS_S3_ENDPOINT_URL.rstrip('/')}/{AWS_STORAGE_BUCKET_NAME.rstrip('/')}/"
-        )
+        MEDIA_URL = f"{AWS_S3_ENDPOINT_URL.rstrip('/')}/{AWS_STORAGE_BUCKET_NAME.rstrip('/')}/"
 else:
     MEDIA_URL = "/media/"
 
@@ -288,9 +278,7 @@ SECURE_SSL_REDIRECT = env.bool("DJANGO_SECURE_SSL_REDIRECT", default=not DEBUG)
 SESSION_COOKIE_SECURE = env.bool("SESSION_COOKIE_SECURE", default=not DEBUG)
 CSRF_COOKIE_SECURE = env.bool("CSRF_COOKIE_SECURE", default=not DEBUG)
 SECURE_HSTS_SECONDS = env.int("SECURE_HSTS_SECONDS", default=31536000 if not DEBUG else 0)
-SECURE_HSTS_INCLUDE_SUBDOMAINS = env.bool(
-    "SECURE_HSTS_INCLUDE_SUBDOMAINS", default=not DEBUG
-)
+SECURE_HSTS_INCLUDE_SUBDOMAINS = env.bool("SECURE_HSTS_INCLUDE_SUBDOMAINS", default=not DEBUG)
 SECURE_HSTS_PRELOAD = env.bool("SECURE_HSTS_PRELOAD", default=not DEBUG)
 
 AUTH_PASSWORD_VALIDATORS = [
@@ -316,6 +304,25 @@ LANGUAGE_CODE = "en-us"
 TIME_ZONE = "UTC"
 USE_I18N = True
 USE_TZ = True
+
+LIVEKIT_URL = env("LIVEKIT_URL", default="")
+LIVEKIT_API_KEY = env("LIVEKIT_API_KEY", default="")
+LIVEKIT_API_SECRET = env("LIVEKIT_API_SECRET", default="")
+LIVEKIT_TOKEN_TTL_SECONDS = env.int("LIVEKIT_TOKEN_TTL_SECONDS", default=600)
+
+
+if ENV == "production":
+    missing_livekit = [
+        name
+        for name, value in (
+            ("LIVEKIT_URL", LIVEKIT_URL),
+            ("LIVEKIT_API_KEY", LIVEKIT_API_KEY),
+            ("LIVEKIT_API_SECRET", LIVEKIT_API_SECRET),
+        )
+        if not value
+    ]
+    if missing_livekit:
+        raise ImproperlyConfigured("Missing LiveKit configuration: " + ", ".join(missing_livekit))
 
 SPECTACULAR_SETTINGS = {
     "TITLE": "NestChat API",

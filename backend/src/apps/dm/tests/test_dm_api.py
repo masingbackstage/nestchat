@@ -123,4 +123,6 @@ def test_create_direct_conversation_endpoint_requires_accepted_friendship():
         format="json",
     )
     assert allowed.status_code == 200
-    assert allowed.json().get("conversationType", allowed.json().get("conversation_type")) == "DIRECT"
+    assert (
+        allowed.json().get("conversationType", allowed.json().get("conversation_type")) == "DIRECT"
+    )

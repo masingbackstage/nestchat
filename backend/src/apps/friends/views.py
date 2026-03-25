@@ -125,7 +125,9 @@ class FriendRequestViewSet(viewsets.ViewSet):
             existing.addressee = target_user
             existing.status = Friendship.Status.PENDING
             existing.responded_at = None
-            existing.save(update_fields=["requester", "addressee", "status", "responded_at", "updated_at"])
+            existing.save(
+                update_fields=["requester", "addressee", "status", "responded_at", "updated_at"]
+            )
             out = FriendshipRequestOutgoingSerializer(existing, context={"request": request})
             return Response(out.data, status=status.HTTP_201_CREATED)
 

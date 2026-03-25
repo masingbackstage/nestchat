@@ -1,3 +1,3 @@
-from .server_viewset import ServerViewSet
+from .server import ServerViewSet
 
 __all__ = ["ServerViewSet"]

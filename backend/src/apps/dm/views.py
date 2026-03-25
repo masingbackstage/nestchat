@@ -9,10 +9,15 @@ from rest_framework import exceptions, mixins, permissions, status, viewsets
 from rest_framework.decorators import action
 from rest_framework.response import Response
 
-from src.apps.dm.models import DMConversation, DMConversationParticipant, DMMessage, DMMessageReaction
+from src.apps.dm.models import (
+    DMConversation,
+    DMConversationParticipant,
+    DMMessage,
+    DMMessageReaction,
+)
 from src.apps.dm.serializers import (
-    CreateDMConversationSerializer,
     CreateDirectDMConversationSerializer,
+    CreateDMConversationSerializer,
     CreateDMMessageSerializer,
     DMConversationListItemSerializer,
     DMMessageReadSerializer,
@@ -20,7 +25,6 @@ from src.apps.dm.serializers import (
     ToggleDMReactionSerializer,
     UpdateDMMessageSerializer,
 )
-from src.apps.friends.models import Friendship
 from src.apps.dm.services import (
     DMConversationNotFound,
     DMConversationPermissionDenied,
@@ -30,11 +34,14 @@ from src.apps.dm.services import (
     get_dm_conversation_for_user_or_raise,
     get_dm_message_for_user_or_raise,
 )
+from src.apps.friends.models import Friendship
 
 User = get_user_model()
 
 
-class DMConversationViewSet(viewsets.GenericViewSet, mixins.ListModelMixin, mixins.CreateModelMixin):
+class DMConversationViewSet(
+    viewsets.GenericViewSet, mixins.ListModelMixin, mixins.CreateModelMixin
+):
     permission_classes = [permissions.IsAuthenticated]
     serializer_class = DMConversationListItemSerializer
     lookup_field = "uuid"
@@ -74,10 +81,14 @@ class DMConversationViewSet(viewsets.GenericViewSet, mixins.ListModelMixin, mixi
             unread_count = 0
             if participant and participant.last_read_message_id:
                 marker = participant.last_read_message
-                unread_count = DMMessage.objects.filter(conversation=conversation).filter(
-                    Q(created_at__gt=marker.created_at)
-                    | Q(created_at=marker.created_at, uuid__gt=marker.uuid)
-                ).count()
+                unread_count = (
+                    DMMessage.objects.filter(conversation=conversation)
+                    .filter(
+                        Q(created_at__gt=marker.created_at)
+                        | Q(created_at=marker.created_at, uuid__gt=marker.uuid)
+                    )
+                    .count()
+                )
             else:
                 unread_count = DMMessage.objects.filter(conversation=conversation).count()
 
@@ -120,7 +131,9 @@ class DMConversationViewSet(viewsets.GenericViewSet, mixins.ListModelMixin, mixi
         else:
             if len(participant_ids) < 3:
                 raise exceptions.ValidationError(
-                    {"participant_uuids": "Group DM requires at least 3 participants including you."}
+                    {
+                        "participant_uuids": "Group DM requires at least 3 participants including you."
+                    }
                 )
             conversation = DMConversation.objects.create(
                 conversation_type=DMConversation.TYPE_GROUP,
@@ -134,7 +147,9 @@ class DMConversationViewSet(viewsets.GenericViewSet, mixins.ListModelMixin, mixi
                 ]
             )
 
-        response_serializer = DMConversationListItemSerializer(conversation, context=self.get_serializer_context())
+        response_serializer = DMConversationListItemSerializer(
+            conversation, context=self.get_serializer_context()
+        )
         return Response(
             response_serializer.data,
             status=status.HTTP_201_CREATED,
@@ -150,11 +165,15 @@ class DMConversationViewSet(viewsets.GenericViewSet, mixins.ListModelMixin, mixi
         if not target_user:
             raise exceptions.NotFound("User not found.")
         if target_user.pk == request.user.pk:
-            raise exceptions.ValidationError({"detail": "Cannot create direct conversation with yourself."})
+            raise exceptions.ValidationError(
+                {"detail": "Cannot create direct conversation with yourself."}
+            )
 
         friendship = Friendship.pair_queryset(request.user, target_user).first()
         if not friendship or friendship.status != Friendship.Status.ACCEPTED:
-            raise exceptions.PermissionDenied("Direct conversation is allowed only with accepted friends.")
+            raise exceptions.PermissionDenied(
+                "Direct conversation is allowed only with accepted friends."
+            )
 
         participant_uuid_values = sorted([str(request.user.uuid), str(target_user.uuid)])
         direct_key = "::".join(participant_uuid_values)
@@ -224,7 +243,9 @@ class DMConversationViewSet(viewsets.GenericViewSet, mixins.ListModelMixin, mixi
             has_more_newer = len(rows) > limit
             rows = rows[:limit]
             has_more_older = (
-                DMMessage.objects.filter(conversation=conversation, created_at__lt=rows[0].created_at).exists()
+                DMMessage.objects.filter(
+                    conversation=conversation, created_at__lt=rows[0].created_at
+                ).exists()
                 if rows
                 else False
             )
@@ -243,7 +264,9 @@ class DMConversationViewSet(viewsets.GenericViewSet, mixins.ListModelMixin, mixi
             rows = rows[:limit]
             rows.reverse()
             has_more_newer = (
-                DMMessage.objects.filter(conversation=conversation, created_at__gt=rows[-1].created_at).exists()
+                DMMessage.objects.filter(
+                    conversation=conversation, created_at__gt=rows[-1].created_at
+                ).exists()
                 if rows
                 else False
             )
@@ -345,13 +368,17 @@ class DMConversationViewSet(viewsets.GenericViewSet, mixins.ListModelMixin, mixi
         cursor_dt, cursor_uuid = cursor
         if cursor_uuid is None:
             return queryset.filter(created_at__lt=cursor_dt)
-        return queryset.filter(Q(created_at__lt=cursor_dt) | Q(created_at=cursor_dt, uuid__lt=cursor_uuid))
+        return queryset.filter(
+            Q(created_at__lt=cursor_dt) | Q(created_at=cursor_dt, uuid__lt=cursor_uuid)
+        )
 
     def apply_after_cursor(self, queryset, cursor):
         cursor_dt, cursor_uuid = cursor
         if cursor_uuid is None:
             return queryset.filter(created_at__gt=cursor_dt)
-        return queryset.filter(Q(created_at__gt=cursor_dt) | Q(created_at=cursor_dt, uuid__gt=cursor_uuid))
+        return queryset.filter(
+            Q(created_at__gt=cursor_dt) | Q(created_at=cursor_dt, uuid__gt=cursor_uuid)
+        )
 
     def build_cursor(self, message):
         return f"{message.created_at.isoformat()}|{message.uuid}"
@@ -388,7 +415,9 @@ class DMMessageViewSet(
         message.content = serializer.validated_data["content"]
         message.edited_at = timezone.now()
         message.save(update_fields=["content", "edited_at", "updated_at"])
-        return Response(DMMessageReadSerializer(message, context=self.get_serializer_context()).data)
+        return Response(
+            DMMessageReadSerializer(message, context=self.get_serializer_context()).data
+        )
 
     def destroy(self, request, *args, **kwargs):
         message = self.get_object()
@@ -430,4 +459,6 @@ class DMMessageViewSet(
             DMMessageReaction.objects.create(message=message, user=request.user, emoji=emoji)
 
         message.refresh_from_db()
-        return Response(DMMessageReadSerializer(message, context=self.get_serializer_context()).data)
+        return Response(
+            DMMessageReadSerializer(message, context=self.get_serializer_context()).data
+        )
