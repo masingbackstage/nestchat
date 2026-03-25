@@ -15,13 +15,9 @@
 
   <main class="landing-main">
     <section class="landing-panel glass-panel">
-      <p class="landing-badge">NestChat</p>
+      <h1 class="landing-title text-gradient">NESTCHAT</h1>
 
-      <h1 class="landing-title text-gradient">Team chat that never loses context.</h1>
-
-      <p class="landing-copy">
-        Channels, roles, realtime updates, pagination, and message moderation in one interface.
-      </p>
+      <p class="landing-copy">EAGLE</p>
 
       <div class="landing-actions">
         <button
@@ -52,10 +48,6 @@
 
   .landing-panel {
     @apply w-full rounded-[2rem] px-8 py-12 md:px-14 md:py-16;
-  }
-
-  .landing-badge {
-    @apply mb-5 inline-flex w-fit rounded-pill border border-white/15 bg-white/5 px-3 py-1 text-sm uppercase tracking-[0.18em] text-muted-200;
   }
 
   .landing-title {

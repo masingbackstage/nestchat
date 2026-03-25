@@ -1,4 +1,4 @@
-{$FRONTEND_DOMAIN} {
+{$ROOT_DOMAIN}, {$FRONTEND_DOMAIN} {
 	encode zstd gzip
 	root * /srv/frontend
 	try_files {path} /index.html

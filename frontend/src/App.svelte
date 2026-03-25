@@ -109,9 +109,14 @@
     }
   }
 
-  function navigate(path: '/' | '/app', mode?: 'login' | 'register'): void {
+  function navigate(
+    path: '/' | '/app',
+    mode?: 'login' | 'register',
+    replaceState = false,
+  ): void {
     const search = path === '/app' && mode ? `?mode=${mode}` : '';
-    window.history.pushState({}, '', `${path}${search}`);
+    const historyMethod = replaceState ? 'replaceState' : 'pushState';
+    window.history[historyMethod]({}, '', `${path}${search}`);
     routePath = path;
     if (mode) {
       authMode = mode;
@@ -147,7 +152,13 @@
     tearDownGatewaySubscriptions();
     isSettingsOpen = false;
     isSettingsSubmitting = false;
-    navigate('/app', 'login');
+    const currentPath = getCurrentPath();
+    if (currentPath === '/') {
+      authMode = 'login';
+      navigate('/', undefined, true);
+      return;
+    }
+    navigate('/app', 'login', true);
   }
 
   const handleGatewayEvent = createGatewayEventHandler({
