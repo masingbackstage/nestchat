@@ -94,6 +94,30 @@
   let uiPersistenceReady = false;
   const configuredAppUrl = import.meta.env.VITE_APP_URL?.replace(/\/$/, '') ?? '';
 
+  function getDerivedAppUrl(): string {
+    const { protocol, hostname, port, origin } = window.location;
+
+    if (configuredAppUrl) {
+      return configuredAppUrl;
+    }
+
+    if (hostname === 'localhost' || /^[\d.]+$/.test(hostname)) {
+      return origin;
+    }
+
+    if (hostname.startsWith('app.')) {
+      return origin;
+    }
+
+    const portSuffix = port ? `:${port}` : '';
+    return `${protocol}//app.${hostname}${portSuffix}`;
+  }
+
+  function buildAppUrl(path: '/app', mode?: 'login' | 'register'): string {
+    const search = mode ? `?mode=${mode}` : '';
+    return `${getDerivedAppUrl()}${path}${search}`;
+  }
+
   function getCurrentPath(): string {
     return window.location.pathname === '/app' ? '/app' : '/';
   }
@@ -115,6 +139,16 @@
     mode?: 'login' | 'register',
     replaceState = false,
   ): void {
+    if (path === '/app') {
+      const targetUrl = buildAppUrl('/app', mode);
+      const currentUrl = `${window.location.origin}${window.location.pathname}${window.location.search}`;
+
+      if (targetUrl !== currentUrl && !window.location.origin.startsWith(getDerivedAppUrl())) {
+        window.location[replaceState ? 'replace' : 'assign'](targetUrl);
+        return;
+      }
+    }
+
     const search = path === '/app' && mode ? `?mode=${mode}` : '';
     const historyMethod = replaceState ? 'replaceState' : 'pushState';
     window.history[historyMethod]({}, '', `${path}${search}`);
@@ -125,12 +159,7 @@
   }
 
   function openAppAuth(mode: 'login' | 'register'): void {
-    if (configuredAppUrl) {
-      window.location.href = `${configuredAppUrl}/app?mode=${mode}`;
-      return;
-    }
-
-    navigate('/app', mode);
+    window.location.href = buildAppUrl('/app', mode);
   }
 
   function clearReadStateCache(): void {
