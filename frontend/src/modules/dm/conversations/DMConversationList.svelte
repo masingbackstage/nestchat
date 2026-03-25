@@ -1,6 +1,7 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import { Check, MessageSquarePlus, UserMinus, X } from 'lucide-svelte';
+  import { getCurrentUserUuid } from '../../../lib/auth';
   import { joinGatewayDMConversation } from '../../../lib/socket';
   import { pushToast } from '../../../lib/stores/toast';
   import { activeDMConversation } from '../../../lib/stores/ui';
@@ -8,6 +9,9 @@
   import {
     createDMConversation,
     dmConversations,
+    dmConversationsLoading,
+    dmConversationsRefreshing,
+    dmStorageHydrated,
     ensureDMConversations,
     ensureDMMessages,
     openDirectConversation,
@@ -18,23 +22,29 @@
     friends,
     friendsError,
     friendsLoading,
+    friendsRefreshing,
+    friendsStorageHydrated,
     incomingFriendRequests,
     loadFriendsData,
     outgoingFriendRequests,
     removeFriendRelation,
   } from '../friends';
+  import { loadDMUICache } from '../storage';
   import type { DMConversation, FriendUser } from '../../../types/gateway';
 
-  let isLoading = false;
   let isCreateModalOpen = false;
   let isCreatingConversation = false;
+  let currentUserUuid: string | null = null;
 
   async function loadConversations(): Promise<void> {
-    isLoading = true;
     try {
       await Promise.all([ensureDMConversations(), loadFriendsData()]);
       if (!$activeDMConversation && $dmConversations.length > 0) {
-        activeDMConversation.set($dmConversations[0] ?? null);
+        const cachedActiveConversationUuid = loadDMUICache().activeConversationUuid;
+        const cachedActiveConversation =
+          $dmConversations.find((conversation) => conversation.uuid === cachedActiveConversationUuid) ??
+          null;
+        activeDMConversation.set(cachedActiveConversation ?? $dmConversations[0] ?? null);
       }
     } catch (error) {
       pushToast({
@@ -42,7 +52,7 @@
         message: error instanceof Error ? error.message : 'Failed to load direct messages.',
       });
     } finally {
-      isLoading = false;
+      // no-op: loading state is owned by the stores
     }
   }
 
@@ -55,7 +65,9 @@
       return conversation.title;
     }
 
-    const others = conversation.participants ?? [];
+    const others = (conversation.participants ?? []).filter(
+      (participant) => participant.uuid !== currentUserUuid,
+    );
     if (others.length === 0) {
       return 'Direct message';
     }
@@ -134,6 +146,7 @@
 
   $: onlineFriends = $friends.filter((friend) => Boolean(friend.isOnline ?? friend.is_online));
   $: offlineFriends = $friends.filter((friend) => !(friend.isOnline ?? friend.is_online));
+  $: currentUserUuid = getCurrentUserUuid();
 
   onMount(() => {
     void loadConversations();
@@ -157,9 +170,12 @@
   </header>
 
   <div class="app-scrollbar dm-conversation-list-body">
-    {#if isLoading || $friendsLoading}
+    {#if ($dmConversationsLoading && !$dmStorageHydrated) || ($friendsLoading && !$friendsStorageHydrated)}
       <p class="dm-conversation-list-state-copy">Loading...</p>
     {:else}
+      {#if $dmConversationsRefreshing || $friendsRefreshing}
+        <p class="dm-conversation-list-refresh-copy">Refreshing...</p>
+      {/if}
       <section class="dm-conversation-list-section">
         <h3 class="dm-conversation-list-section-title">Friends</h3>
 
@@ -345,6 +361,10 @@
 
   .dm-conversation-list-state-copy {
     @apply px-2 py-2 text-sm text-muted-300;
+  }
+
+  .dm-conversation-list-refresh-copy {
+    @apply px-2 pb-2 text-[11px] uppercase tracking-[0.16em] text-muted-500;
   }
 
   .dm-conversation-list-row {

@@ -226,6 +226,8 @@ class GatewayConsumer(AsyncWebsocketConsumer):
                 **serialized,
                 "client_id": client_id,
             }
+            if client_id is None:
+                outgoing_payload.pop("client_id", None)
             group_name = f"dm_{conversation_uuid}"
             if group_name not in self.joined_dm_groups:
                 await self.channel_layer.group_add(group_name, self.channel_name)
@@ -463,6 +465,8 @@ class GatewayConsumer(AsyncWebsocketConsumer):
                 "author_uuid": str(self.user.uuid),
                 "client_id": client_id,
             }
+            if client_id is None:
+                outgoing_payload.pop("client_id", None)
 
             group_name = f"channel_{channel_uuid}"
             if group_name not in self.joined_channel_groups:

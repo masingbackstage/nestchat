@@ -2,6 +2,14 @@ import { get, writable } from 'svelte/store';
 import { activeDMConversation } from '../../../lib/stores/ui';
 import type { DMConversation, DMMessage } from '../../../types/gateway';
 import {
+  clearDMStorage,
+  loadDMConversationsCache,
+  loadDMMessagesCache,
+  loadDMUICache,
+  saveDMConversationsCache,
+  saveDMMessagesCache,
+} from '../storage';
+import {
   createDMConversationRequest,
   fetchDMConversations,
   fetchDMMessagesPage,
@@ -22,11 +30,47 @@ import {
 export const dmConversations = writable<DMConversation[]>([]);
 export const dmMessagesByConversation = writable<Record<string, DMMessage[]>>({});
 export const dmQueryStateByConversation = writable<Record<string, DMQueryState>>({});
+export const dmConversationsLoading = writable(false);
+export const dmConversationsRefreshing = writable(false);
+export const dmStorageHydrated = writable(false);
 
 const inFlightInitial = new Map<string, Promise<void>>();
 const inFlightOlder = new Map<string, Promise<void>>();
 const inFlightNewer = new Map<string, Promise<void>>();
 let inFlightConversations: Promise<void> | null = null;
+let dmConversationsFetchedAt: number | null = null;
+let storageReady = false;
+
+function hasConversationCache(): boolean {
+  return dmConversationsFetchedAt !== null;
+}
+
+function isConversationCacheFresh(): boolean {
+  if (!dmConversationsFetchedAt) {
+    return false;
+  }
+
+  return isDMCacheFresh(true, dmConversationsFetchedAt);
+}
+
+function persistConversationsSnapshot(conversations: DMConversation[]): void {
+  if (!storageReady) {
+    return;
+  }
+
+  saveDMConversationsCache(
+    conversations,
+    dmConversationsFetchedAt ?? (conversations.length > 0 ? Date.now() : null),
+  );
+}
+
+function persistMessagesSnapshot(): void {
+  if (!storageReady) {
+    return;
+  }
+
+  saveDMMessagesCache(get(dmMessagesByConversation), get(dmQueryStateByConversation));
+}
 
 function patchQueryState(conversationUuid: string, patch: Partial<DMQueryState>): void {
   dmQueryStateByConversation.update((current) => ({
@@ -95,8 +139,20 @@ export async function ensureDMConversations(force = false): Promise<void> {
     return inFlightConversations;
   }
 
+  if (!force && hasConversationCache() && isConversationCacheFresh()) {
+    return;
+  }
+
+  const background = !force && hasConversationCache();
+  if (background) {
+    dmConversationsRefreshing.set(true);
+  } else {
+    dmConversationsLoading.set(true);
+  }
+
   const run = (async () => {
     const data = await fetchDMConversations();
+    dmConversationsFetchedAt = Date.now();
     dmConversations.set(sortConversations(data.map(mapConversation)));
   })();
 
@@ -104,11 +160,14 @@ export async function ensureDMConversations(force = false): Promise<void> {
   try {
     await run;
   } finally {
+    dmConversationsLoading.set(false);
+    dmConversationsRefreshing.set(false);
     inFlightConversations = null;
   }
 }
 
 export async function ensureDMMessages(conversationUuid: string): Promise<void> {
+  const hasCache = conversationUuid in get(dmMessagesByConversation);
   if (isFresh(conversationUuid)) {
     return;
   }
@@ -118,7 +177,7 @@ export async function ensureDMMessages(conversationUuid: string): Promise<void> 
     return inFlight;
   }
 
-  patchQueryState(conversationUuid, { isLoadingInitial: true, error: null });
+  patchQueryState(conversationUuid, { isLoadingInitial: !hasCache, error: null });
   const run = runFetch(conversationUuid, 'initial')
     .catch((error) => {
       patchQueryState(conversationUuid, {
@@ -302,9 +361,51 @@ export function resetDMState(): void {
   dmConversations.set([]);
   dmMessagesByConversation.set({});
   dmQueryStateByConversation.set({});
+  dmConversationsLoading.set(false);
+  dmConversationsRefreshing.set(false);
+  dmStorageHydrated.set(false);
 
   inFlightInitial.clear();
   inFlightOlder.clear();
   inFlightNewer.clear();
   inFlightConversations = null;
+  dmConversationsFetchedAt = null;
+  storageReady = false;
+  clearDMStorage();
 }
+
+export function hydrateDMStateFromStorage(): void {
+  if (storageReady) {
+    return;
+  }
+
+  const conversationsCache = loadDMConversationsCache();
+  const messagesCache = loadDMMessagesCache();
+  const uiCache = loadDMUICache();
+
+  dmConversationsFetchedAt = conversationsCache.savedAt;
+  dmConversations.set(sortConversations(conversationsCache.conversations.map(mapConversation)));
+  dmMessagesByConversation.set(messagesCache.messagesByConversation);
+  dmQueryStateByConversation.set(messagesCache.queryStateByConversation);
+
+  const restoredActiveConversation =
+    conversationsCache.conversations.find(
+      (conversation) => conversation.uuid === uiCache.activeConversationUuid,
+    ) ?? null;
+  activeDMConversation.set(restoredActiveConversation);
+
+  storageReady = true;
+  dmStorageHydrated.set(true);
+}
+
+dmConversations.subscribe((current) => {
+  persistConversationsSnapshot(current);
+});
+
+dmMessagesByConversation.subscribe(() => {
+  persistMessagesSnapshot();
+});
+
+dmQueryStateByConversation.subscribe(() => {
+  persistMessagesSnapshot();
+});

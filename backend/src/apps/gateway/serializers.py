@@ -122,12 +122,11 @@ class GatewayRequestSerializer(serializers.Serializer):
                 else:
                     raise serializers.ValidationError({"payload": payload_serializer.errors})
             elif action == ChatAction.SEND_DM_MESSAGE:
-                content_serializer = CreateDMMessageSerializer(
-                    data={
-                        "content": payload.get("content"),
-                        "client_id": payload.get("client_id"),
-                    }
-                )
+                content_payload = {"content": payload.get("content")}
+                if payload.get("client_id") is not None:
+                    content_payload["client_id"] = payload.get("client_id")
+
+                content_serializer = CreateDMMessageSerializer(data=content_payload)
                 if not content_serializer.is_valid():
                     raise serializers.ValidationError({"payload": content_serializer.errors})
                 conversation_serializer = JoinDMConversationPayloadSerializer(

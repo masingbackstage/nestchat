@@ -8,6 +8,7 @@ from django.test import override_settings
 from rest_framework_simplejwt.tokens import AccessToken
 
 from src.apps.chat.models import Message
+from src.apps.dm.models import DMConversation, DMMessage
 from src.apps.server.models import Channel, Role, Server, ServerMember
 from src.apps.user.models import CustomUser
 from src.asgi import application
@@ -233,6 +234,79 @@ def test_ws_send_message_echoes_client_id():
     assert str(event["module"]).lower() == "chat"
     assert event["action"] == "new_message"
     assert event["payload"]["client_id"] == "client-123"
+
+
+@pytest.mark.django_db(transaction=True)
+@override_settings(CHANNEL_LAYERS={"default": {"BACKEND": "channels.layers.InMemoryChannelLayer"}})
+def test_ws_send_dm_message_without_client_id_persists_message():
+    author = CustomUser.objects.create_user(email="author-dm-ws1@example.com", password="pw")
+    recipient = CustomUser.objects.create_user(email="recipient-dm-ws1@example.com", password="pw")
+    conversation = DMConversation.objects.create(conversation_type=DMConversation.TYPE_DIRECT)
+    conversation.participants.add(author, recipient)
+
+    async def scenario():
+        communicator = WebsocketCommunicator(application, _ws_path_for_user(author))
+        connected, _ = await communicator.connect()
+        assert connected is True
+        await communicator.send_json_to(
+            {
+                "module": "CHAT",
+                "action": "SEND_DM_MESSAGE",
+                "payload": {
+                    "conversation_uuid": str(conversation.uuid),
+                    "content": "hello dm",
+                },
+            }
+        )
+        event = await communicator.receive_json_from(timeout=1)
+        await communicator.disconnect()
+        return event
+
+    event = async_to_sync(scenario)()
+    assert str(event["module"]).lower() == "chat"
+    assert event["action"] == "dm_new_message"
+    assert event["payload"]["conversation_uuid"] == str(conversation.uuid)
+    assert event["payload"]["content"] == "hello dm"
+    assert "client_id" not in event["payload"]
+
+    messages = list(DMMessage.objects.filter(conversation=conversation))
+    assert len(messages) == 1
+    assert messages[0].content == "hello dm"
+    assert messages[0].author_id == author.pk
+
+
+@pytest.mark.django_db(transaction=True)
+@override_settings(CHANNEL_LAYERS={"default": {"BACKEND": "channels.layers.InMemoryChannelLayer"}})
+def test_ws_send_dm_message_echoes_client_id():
+    author = CustomUser.objects.create_user(email="author-dm-ws2@example.com", password="pw")
+    recipient = CustomUser.objects.create_user(email="recipient-dm-ws2@example.com", password="pw")
+    conversation = DMConversation.objects.create(conversation_type=DMConversation.TYPE_DIRECT)
+    conversation.participants.add(author, recipient)
+
+    async def scenario():
+        communicator = WebsocketCommunicator(application, _ws_path_for_user(author))
+        connected, _ = await communicator.connect()
+        assert connected is True
+        await communicator.send_json_to(
+            {
+                "module": "CHAT",
+                "action": "SEND_DM_MESSAGE",
+                "payload": {
+                    "conversation_uuid": str(conversation.uuid),
+                    "content": "hello dm client",
+                    "client_id": "dm-client-123",
+                },
+            }
+        )
+        event = await communicator.receive_json_from(timeout=1)
+        await communicator.disconnect()
+        return event
+
+    event = async_to_sync(scenario)()
+    assert str(event["module"]).lower() == "chat"
+    assert event["action"] == "dm_new_message"
+    assert event["payload"]["client_id"] == "dm-client-123"
+    assert DMMessage.objects.filter(conversation=conversation, content="hello dm client").count() == 1
 
 
 @pytest.mark.django_db(transaction=True)

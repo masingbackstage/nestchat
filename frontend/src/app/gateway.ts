@@ -83,7 +83,9 @@ function mapChannelMessage(payload: ChatGatewayPayload, deps: GatewayEventHandle
     channel_uuid: channelUuid,
     content: payload.content ?? '',
     author:
-      payload.authorProfileDisplayName ?? payload.author_profile_display_name ?? String(payload.author ?? ''),
+      payload.authorProfileDisplayName ??
+      payload.author_profile_display_name ??
+      String(payload.author ?? ''),
     avatar_url: deps.toApiAbsoluteUrl(payload.avatarUrl ?? payload.avatar_url ?? null),
     author_uuid: payload.author_uuid ?? (payload.author ? String(payload.author) : undefined),
     is_deleted: Boolean(payload.isDeleted ?? payload.is_deleted ?? false),
@@ -104,7 +106,9 @@ function mapDMMessage(payload: ChatGatewayPayload, deps: GatewayEventHandlerDeps
     channel_uuid: conversationUuid,
     content: payload.content ?? '',
     author:
-      payload.authorProfileDisplayName ?? payload.author_profile_display_name ?? String(payload.author ?? ''),
+      payload.authorProfileDisplayName ??
+      payload.author_profile_display_name ??
+      String(payload.author ?? ''),
     avatar_url: deps.toApiAbsoluteUrl(payload.avatarUrl ?? payload.avatar_url ?? null),
     author_uuid: payload.author ? String(payload.author) : undefined,
     is_deleted: Boolean(payload.isDeleted ?? payload.is_deleted ?? false),
@@ -127,11 +131,18 @@ export function createGatewayEventHandler(deps: GatewayEventHandlerDeps) {
     const actionName = String(event.action ?? '').toLowerCase();
 
     if (moduleName === 'system' && actionName === 'error') {
-      const payload = event.payload as { code?: string; detail?: string };
-      if (payload.code === 'permission_denied' || payload.code === 'not_found') {
+      const payload = event.payload as { code?: string; detail?: string } | string | undefined;
+      const detail =
+        typeof payload === 'string' ? payload : (payload?.detail ?? 'Unexpected gateway error.');
+      if (
+        typeof payload === 'string' ||
+        payload?.code === 'permission_denied' ||
+        payload?.code === 'not_found' ||
+        payload?.code === 'validation_error'
+      ) {
         deps.pushToast({
           type: 'error',
-          message: payload.detail ?? 'Channel permission error.',
+          message: detail,
         });
       }
       return;

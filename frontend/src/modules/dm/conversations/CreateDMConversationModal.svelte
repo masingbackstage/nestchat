@@ -1,6 +1,7 @@
 <script lang="ts">
   import { createEventDispatcher, onDestroy, onMount } from 'svelte';
   import { Search, X } from 'lucide-svelte';
+  import Portal from '../../shared/Portal.svelte';
   import { searchUsers } from '../friends';
   import type { UserSearchResult } from '../../../types/gateway';
 
@@ -121,136 +122,138 @@
   });
 </script>
 
-<div class="dm-create-modal-overlay">
-  <button
-    type="button"
-    aria-label="Close create conversation modal"
-    class="dm-create-modal-backdrop"
-    on:click={closeModal}
-    disabled={isSubmitting}
-  ></button>
-  <section class="glass-panel glass-panel-strong dm-create-modal">
-    <h2 class="dm-create-modal-title">New conversation</h2>
-    <p class="dm-create-modal-copy">Search users by email, tag or display name.</p>
+<Portal>
+  <div class="dm-create-modal-overlay">
+    <button
+      type="button"
+      aria-label="Close create conversation modal"
+      class="dm-create-modal-backdrop"
+      on:click={closeModal}
+      disabled={isSubmitting}
+    ></button>
+    <section class="glass-panel glass-panel-strong dm-create-modal">
+      <h2 class="dm-create-modal-title">New conversation</h2>
+      <p class="dm-create-modal-copy">Search users by email, tag or display name.</p>
 
-    {#if error}
-      <p class="dm-create-modal-error">{error}</p>
-    {/if}
-
-    <div class="dm-create-modal-fields">
-      <label class="dm-create-modal-field">
-        <span>Type</span>
-        <select
-          bind:value={mode}
-          class="dm-create-modal-select"
-          disabled={isSubmitting}
-        >
-          <option value="direct">Direct (1:1)</option>
-          <option value="group">Group</option>
-        </select>
-      </label>
-
-      {#if mode === 'group'}
-        <label class="dm-create-modal-field">
-          <span>Title (optional)</span>
-          <input
-            type="text"
-            bind:value={title}
-            maxlength="120"
-            placeholder="Project squad"
-            class="dm-create-modal-input"
-            disabled={isSubmitting}
-          />
-        </label>
+      {#if error}
+        <p class="dm-create-modal-error">{error}</p>
       {/if}
 
-      <label class="dm-create-modal-field">
-        <span>Recipients</span>
-        <div class="dm-create-modal-recipient-box">
-          <div class="dm-create-modal-chips">
-            {#each selectedUsers as user (user.uuid)}
-              <span class="dm-create-modal-chip">
-                {user.displayName ?? user.display_name ?? user.email}
-                <button
-                  type="button"
-                  class="dm-create-modal-chip-button"
-                  on:click={() => removeUser(user.uuid)}
-                  aria-label="Remove recipient"
-                >
-                  <X class="h-3.5 w-3.5" />
-                </button>
-              </span>
-          {/each}
-          </div>
+      <div class="dm-create-modal-fields">
+        <label class="dm-create-modal-field">
+          <span>Type</span>
+          <select
+            bind:value={mode}
+            class="dm-create-modal-select"
+            disabled={isSubmitting}
+          >
+            <option value="direct">Direct (1:1)</option>
+            <option value="group">Group</option>
+          </select>
+        </label>
 
-          <div class="dm-create-modal-search">
-            <Search class="pointer-events-none absolute left-2 top-2.5 h-4 w-4 text-muted-500" />
+        {#if mode === 'group'}
+          <label class="dm-create-modal-field">
+            <span>Title (optional)</span>
             <input
               type="text"
-              bind:value={query}
-              placeholder="Type at least 2 characters..."
-              class="dm-create-modal-search-input"
+              bind:value={title}
+              maxlength="120"
+              placeholder="Project squad"
+              class="dm-create-modal-input"
               disabled={isSubmitting}
             />
-          </div>
+          </label>
+        {/if}
 
-          {#if query.trim().length >= 2}
-            <div class="app-scrollbar dm-create-modal-results">
-              {#if isSearching}
-                <p class="dm-create-modal-results-copy">Searching...</p>
-              {:else if searchResults.length === 0}
-                <p class="dm-create-modal-results-copy">No users found.</p>
-              {:else}
-                {#each searchResults as user (user.uuid)}
+        <label class="dm-create-modal-field">
+          <span>Recipients</span>
+          <div class="dm-create-modal-recipient-box">
+            <div class="dm-create-modal-chips">
+              {#each selectedUsers as user (user.uuid)}
+                <span class="dm-create-modal-chip">
+                  {user.displayName ?? user.display_name ?? user.email}
                   <button
                     type="button"
-                    class="dm-create-modal-result"
-                    on:click={() => selectUser(user)}
+                    class="dm-create-modal-chip-button"
+                    on:click={() => removeUser(user.uuid)}
+                    aria-label="Remove recipient"
                   >
-                    <div class="dm-create-modal-result-avatar">
-                      {#if user.avatarUrl ?? user.avatar_url}
-                        <img
-                          src={user.avatarUrl ?? user.avatar_url}
-                          alt={user.displayName ?? user.display_name ?? user.email}
-                          class="dm-create-modal-result-avatar-image"
-                        />
-                      {/if}
-                    </div>
-                    <div class="dm-create-modal-result-content">
-                      <p class="dm-create-modal-result-name">
-                        {user.displayName ?? user.display_name ?? user.email}
-                      </p>
-                      <p class="dm-create-modal-result-email">{user.email}</p>
-                    </div>
+                    <X class="h-3.5 w-3.5" />
                   </button>
-                {/each}
-              {/if}
+                </span>
+            {/each}
             </div>
-          {/if}
-        </div>
-      </label>
-    </div>
 
-    <div class="dm-create-modal-actions">
-      <button
-        type="button"
-        class="dm-create-modal-button dm-create-modal-button-secondary"
-        on:click={closeModal}
-        disabled={isSubmitting}
-      >
-        Cancel
-      </button>
-      <button
-        type="button"
-        class="dm-create-modal-button dm-create-modal-button-primary"
-        on:click={validateAndSubmit}
-        disabled={isSubmitting}
-      >
-        {isSubmitting ? 'Creating...' : 'Create'}
-      </button>
-    </div>
-  </section>
-</div>
+            <div class="dm-create-modal-search">
+              <Search class="pointer-events-none absolute left-2 top-2.5 h-4 w-4 text-muted-500" />
+              <input
+                type="text"
+                bind:value={query}
+                placeholder="Type at least 2 characters..."
+                class="dm-create-modal-search-input"
+                disabled={isSubmitting}
+              />
+            </div>
+
+            {#if query.trim().length >= 2}
+              <div class="app-scrollbar dm-create-modal-results">
+                {#if isSearching}
+                  <p class="dm-create-modal-results-copy">Searching...</p>
+                {:else if searchResults.length === 0}
+                  <p class="dm-create-modal-results-copy">No users found.</p>
+                {:else}
+                  {#each searchResults as user (user.uuid)}
+                    <button
+                      type="button"
+                      class="dm-create-modal-result"
+                      on:click={() => selectUser(user)}
+                    >
+                      <div class="dm-create-modal-result-avatar">
+                        {#if user.avatarUrl ?? user.avatar_url}
+                          <img
+                            src={user.avatarUrl ?? user.avatar_url}
+                            alt={user.displayName ?? user.display_name ?? user.email}
+                            class="dm-create-modal-result-avatar-image"
+                          />
+                        {/if}
+                      </div>
+                      <div class="dm-create-modal-result-content">
+                        <p class="dm-create-modal-result-name">
+                          {user.displayName ?? user.display_name ?? user.email}
+                        </p>
+                        <p class="dm-create-modal-result-email">{user.email}</p>
+                      </div>
+                    </button>
+                  {/each}
+                {/if}
+              </div>
+            {/if}
+          </div>
+        </label>
+      </div>
+
+      <div class="dm-create-modal-actions">
+        <button
+          type="button"
+          class="dm-create-modal-button dm-create-modal-button-secondary"
+          on:click={closeModal}
+          disabled={isSubmitting}
+        >
+          Cancel
+        </button>
+        <button
+          type="button"
+          class="dm-create-modal-button dm-create-modal-button-primary"
+          on:click={validateAndSubmit}
+          disabled={isSubmitting}
+        >
+          {isSubmitting ? 'Creating...' : 'Create'}
+        </button>
+      </div>
+    </section>
+  </div>
+</Portal>
 
 <style>
   .dm-create-modal-overlay {

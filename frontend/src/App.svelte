@@ -12,7 +12,12 @@
   import { toApiAbsoluteUrl } from './lib/url';
   import { createGatewayEventHandler } from './app/gateway';
   import { servers } from './lib/stores/servers';
-  import { activeChannel, activeDMConversation, activeServer } from './lib/stores/ui';
+  import {
+    activeChannel,
+    activeDMConversation,
+    activeServer,
+    resolveStoredActiveView,
+  } from './lib/stores/ui';
   import {
     connectGateway,
     disconnectGateway,
@@ -54,7 +59,9 @@
     dmConversations,
     ensureDMConversations,
     ensureDMMessages,
+    hydrateDMStateFromStorage,
     incrementDMUnread,
+    hydrateFriendsStateFromStorage,
     loadFriendsData,
     resetDMState,
     resetFriendsState,
@@ -62,6 +69,7 @@
     updateDMConversationPreview,
     updateDMMessage,
   } from './modules/dm';
+  import { loadDMUICache, saveDMUICache } from './modules/dm/storage';
   import { DMWindow } from './modules/dm';
 
   let unsubscribeGateway: (() => void) | null = null;
@@ -76,6 +84,7 @@
   let isSettingsSubmitting = false;
   let authMode: 'login' | 'register' = 'login';
   let routePath = '/';
+  let uiPersistenceReady = false;
 
   function getCurrentPath(): string {
     return window.location.pathname === '/app' ? '/app' : '/';
@@ -116,6 +125,7 @@
   }
 
   function applyUnauthenticatedState(): void {
+    uiPersistenceReady = false;
     isAuthenticated = false;
     servers.set([]);
     activeServer.set(null);
@@ -193,10 +203,12 @@
       const data: Server[] = await response.json();
       servers.set(data);
 
-      const firstServer = data[0] ?? null;
-      activeServer.set(firstServer);
-      activeChannel.set(firstServer?.channels?.[0] ?? null);
-      activeDMConversation.set(null);
+      const restoredView = resolveStoredActiveView(data, loadDMUICache());
+      activeServer.set(restoredView.activeServer);
+      activeChannel.set(restoredView.activeChannel);
+      if (!restoredView.isDMView) {
+        activeDMConversation.set(null);
+      }
 
       setGatewayTokenProvider(getValidAccessToken);
       const token = await getValidAccessToken();
@@ -227,7 +239,11 @@
     }
 
     isAuthenticated = true;
+    uiPersistenceReady = false;
+    hydrateDMStateFromStorage();
+    hydrateFriendsStateFromStorage();
     await loadServers();
+    uiPersistenceReady = true;
     isBootstrapping = false;
   }
 
@@ -250,9 +266,18 @@
     joinGatewayChannel($activeChannel.uuid);
   }
 
-  $: if (!$activeServer) {
+  $: if (isAuthenticated && !$activeServer) {
     ensureDMConversations();
     loadFriendsData();
+  }
+
+  $: if (uiPersistenceReady && isAuthenticated) {
+    saveDMUICache({
+      activeConversationUuid: $activeDMConversation?.uuid ?? null,
+      activeServerUuid: $activeServer?.uuid ?? null,
+      activeChannelUuid: $activeChannel?.uuid ?? null,
+      isDMView: !$activeServer,
+    });
   }
 
   $: if ($activeDMConversation?.uuid) {
@@ -302,9 +327,11 @@
 
   async function handleAuthenticated(): Promise<void> {
     isAuthenticated = true;
+    uiPersistenceReady = false;
     authMode = 'login';
     navigate('/app');
     await loadServers();
+    uiPersistenceReady = true;
   }
 
   async function handleLogout(): Promise<void> {
