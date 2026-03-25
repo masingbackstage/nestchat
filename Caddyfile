@@ -1,5 +1,24 @@
-{$ROOT_DOMAIN}, {$FRONTEND_DOMAIN} {
+{$ROOT_DOMAIN} {
 	encode zstd gzip
+
+	@app_path path /app /app/*
+	redir @app_path https://{$FRONTEND_DOMAIN}{uri} permanent
+
+	root * /srv/frontend
+	try_files {path} /index.html
+	file_server
+}
+
+www.{$ROOT_DOMAIN} {
+	redir https://{$ROOT_DOMAIN}{uri} permanent
+}
+
+{$FRONTEND_DOMAIN} {
+	encode zstd gzip
+
+	@root_path path /
+	redir @root_path /app 308
+
 	root * /srv/frontend
 	try_files {path} /index.html
 	file_server

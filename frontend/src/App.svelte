@@ -92,6 +92,7 @@
   let authMode: 'login' | 'register' = 'login';
   let routePath = '/';
   let uiPersistenceReady = false;
+  const configuredAppUrl = import.meta.env.VITE_APP_URL?.replace(/\/$/, '') ?? '';
 
   function getCurrentPath(): string {
     return window.location.pathname === '/app' ? '/app' : '/';
@@ -121,6 +122,15 @@
     if (mode) {
       authMode = mode;
     }
+  }
+
+  function openAppAuth(mode: 'login' | 'register'): void {
+    if (configuredAppUrl) {
+      window.location.href = `${configuredAppUrl}/app?mode=${mode}`;
+      return;
+    }
+
+    navigate('/app', mode);
   }
 
   function clearReadStateCache(): void {
@@ -405,10 +415,10 @@
 {:else if routePath === '/'}
   <LandingPage
     on:startLogin={() => {
-      navigate('/app', 'login');
+      openAppAuth('login');
     }}
     on:startRegister={() => {
-      navigate('/app', 'register');
+      openAppAuth('register');
     }}
   />
 {:else if !isAuthenticated}
