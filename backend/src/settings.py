@@ -27,7 +27,7 @@ if not SECRET_KEY:
 
 ALLOWED_HOSTS = env_list(
     "DJANGO_ALLOWED_HOSTS",
-    default=["localhost", "127.0.0.1", "0.0.0.0", "testserver"] if DEBUG else [],
+    default=["localhost", "127.0.0.1", "0.0.0.0", "testserver", "backend"] if DEBUG else [],
 )
 if not ALLOWED_HOSTS and not DEBUG:
     raise ImproperlyConfigured("DJANGO_ALLOWED_HOSTS must be set when ENV is production.")
@@ -309,8 +309,8 @@ LIVEKIT_URL = env("LIVEKIT_URL", default="")
 LIVEKIT_PUBLIC_URL = env("LIVEKIT_PUBLIC_URL", default="")
 LIVEKIT_API_KEY = env("LIVEKIT_API_KEY", default="")
 LIVEKIT_API_SECRET = env("LIVEKIT_API_SECRET", default="")
+LIVEKIT_WEBHOOK_SECRET = env("LIVEKIT_WEBHOOK_SECRET", default="")
 LIVEKIT_TOKEN_TTL_SECONDS = env.int("LIVEKIT_TOKEN_TTL_SECONDS", default=600)
-
 
 
 if ENV == "production":

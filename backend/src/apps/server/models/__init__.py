@@ -3,3 +3,4 @@ from src.apps.server.models.role import Role
 from src.apps.server.models.server import Server
 from src.apps.server.models.server_emoji import ServerEmoji
 from src.apps.server.models.server_member import ServerMember
+from src.apps.server.models.voice_channel_occupant import VoiceChannelOccupant

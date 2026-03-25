@@ -71,6 +71,13 @@
   } from './modules/dm';
   import { loadDMUICache, saveDMUICache } from './modules/dm/storage';
   import { DMWindow } from './modules/dm';
+  import VoiceDock from './modules/voice/VoiceDock.svelte';
+  import { leaveVoiceCall } from './modules/voice/store';
+  import {
+    applyVoiceMembersChanged,
+    hydrateVoiceOccupants,
+    resetVoiceOccupants,
+  } from './modules/voice/occupancy';
 
   let unsubscribeGateway: (() => void) | null = null;
   let unsubscribeGatewayReconnect: (() => void) | null = null;
@@ -136,6 +143,7 @@
     resetDMState();
     resetFriendsState();
     resetMembersState();
+    resetVoiceOccupants();
     tearDownGatewaySubscriptions();
     isSettingsOpen = false;
     isSettingsSubmitting = false;
@@ -157,6 +165,7 @@
     updateDMConversationPreview,
     incrementDMUnread,
     clearDMUnread,
+    applyVoiceMembersChanged,
     getActiveChannelUuid: () => $activeChannel?.uuid ?? null,
     getActiveDMConversationUuid: () => $activeDMConversation?.uuid ?? null,
   });
@@ -202,6 +211,7 @@
 
       const data: Server[] = await response.json();
       servers.set(data);
+      hydrateVoiceOccupants(data);
 
       const restoredView = resolveStoredActiveView(data, loadDMUICache());
       activeServer.set(restoredView.activeServer);
@@ -345,6 +355,7 @@
       });
       return;
     }
+    await leaveVoiceCall();
     clearAuthTokens();
     pushToast({
       type: 'success',
@@ -364,6 +375,7 @@
       });
       return;
     }
+    await leaveVoiceCall();
     clearAuthTokens();
     pushToast({
       type: 'success',
@@ -439,4 +451,5 @@
   {/if}
 {/if}
 
+<VoiceDock />
 <ToastViewport />

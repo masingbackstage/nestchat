@@ -1,15 +1,20 @@
 from datetime import timedelta
 
+from asgiref.sync import async_to_sync
+from channels.layers import get_channel_layer
 from django.conf import settings
 from django.db import models
 from django.shortcuts import get_object_or_404
+from django.utils import timezone
 from livekit import api
 from rest_framework import status, viewsets
 from rest_framework.decorators import action
 from rest_framework.exceptions import APIException, PermissionDenied, ValidationError
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
+from rest_framework.views import APIView
 
+from src.apps.gateway.enums import ModuleType
 from src.apps.server.enums import ChannelType
 from src.apps.server.models import Channel, Role, Server, ServerEmoji
 from src.apps.server.serializers import (
@@ -21,7 +26,110 @@ from src.apps.server.serializers import (
     ServerMembersResponseSerializer,
     VoiceTokenRequestSerializer,
     VoiceTokenResponseSerializer,
+    build_user_avatar_url,
+    build_user_display_name,
+    build_voice_occupant_payload,
 )
+from src.apps.server.services.voice_occupancy import (
+    clear_voice_channel,
+    list_voice_occupants,
+    parse_room_name,
+    remove_voice_occupant,
+    upsert_voice_occupant,
+)
+
+
+def emit_voice_members_changed(server: Server, channel_uuid: str) -> None:
+    channel_layer = get_channel_layer()
+    if channel_layer is None:
+        return
+
+    occupants = [
+        build_voice_occupant_payload(item.user) for item in list_voice_occupants(channel_uuid)
+    ]
+    payload = {
+        "server_uuid": str(server.uuid),
+        "channel_uuid": channel_uuid,
+        "occupants": occupants,
+        "timestamp": timezone.now().isoformat(),
+    }
+    member_pks = set(server.members.values_list("pk", flat=True))
+    member_pks.add(server.owner_id)
+    for member_pk in member_pks:
+        async_to_sync(channel_layer.group_send)(
+            f"user_{member_pk}",
+            {
+                "type": "gateway_send_event",
+                "module": ModuleType.VOICE.value,
+                "action": "members_changed",
+                "payload": payload,
+            },
+        )
+
+
+class LiveKitWebhookView(APIView):
+    authentication_classes = []
+    permission_classes = []
+
+    def post(self, request):
+        if not settings.LIVEKIT_API_KEY or not (
+            settings.LIVEKIT_WEBHOOK_SECRET or settings.LIVEKIT_API_SECRET
+        ):
+            raise APIException("Voice webhook is not configured.")
+
+        auth_header = request.headers.get("Authorization", "").strip()
+        if not auth_header:
+            return Response(
+                {"detail": "Missing Authorization header."},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
+        body = request.body.decode("utf-8")
+        auth_token = auth_header.removeprefix("Bearer ").strip()
+        verifier = api.TokenVerifier(
+            settings.LIVEKIT_API_KEY,
+            settings.LIVEKIT_WEBHOOK_SECRET or settings.LIVEKIT_API_SECRET,
+        )
+        receiver = api.WebhookReceiver(verifier)
+
+        try:
+            event = receiver.receive(body, auth_token)
+        except Exception:
+            return Response(
+                {"detail": "Invalid webhook signature."}, status=status.HTTP_403_FORBIDDEN
+            )
+
+        room_name = event.room.name if event.room else ""
+        room_identifiers = parse_room_name(room_name)
+        if not room_identifiers:
+            return Response({"status": "ignored"}, status=status.HTTP_200_OK)
+
+        server_uuid, channel_uuid = room_identifiers
+        try:
+            server = Server.objects.get(uuid=server_uuid)
+        except Server.DoesNotExist:
+            return Response({"status": "ignored"}, status=status.HTTP_200_OK)
+
+        event_name = str(event.event or "").lower()
+        participant_identity = event.participant.identity if event.participant else ""
+
+        if event_name == "participant_joined" and participant_identity:
+            affected_channel_uuids = upsert_voice_occupant(
+                server_uuid, channel_uuid, participant_identity
+            )
+        elif (
+            event_name in {"participant_left", "participant_disconnected"} and participant_identity
+        ):
+            affected_channel_uuids = remove_voice_occupant(server_uuid, participant_identity)
+        elif event_name == "room_finished":
+            affected_channel_uuids = clear_voice_channel(server_uuid, channel_uuid)
+        else:
+            affected_channel_uuids = []
+
+        for affected_channel_uuid in dict.fromkeys(affected_channel_uuids):
+            emit_voice_members_changed(server, affected_channel_uuid)
+
+        return Response({"status": "ok"}, status=status.HTTP_200_OK)
 
 
 class ServerViewSet(viewsets.ReadOnlyModelViewSet):
@@ -34,7 +142,7 @@ class ServerViewSet(viewsets.ReadOnlyModelViewSet):
         return (
             Server.objects.filter(models.Q(owner=user) | models.Q(members=user))
             .distinct()
-            .prefetch_related("channels", "emojis")
+            .prefetch_related("channels", "channels__voice_occupants__user__profile", "emojis")
         )
 
     def has_server_access(self, user, server: Server) -> bool:
@@ -67,7 +175,7 @@ class ServerViewSet(viewsets.ReadOnlyModelViewSet):
         if roles:
             channel.allowed_roles.set(roles)
 
-        response_serializer = ChannelDetailSerializer(channel)
+        response_serializer = ChannelDetailSerializer(channel, context={"request": request})
         return Response(response_serializer.data, status=status.HTTP_201_CREATED)
 
     @action(detail=True, methods=["get", "post"], url_path="emojis")
@@ -109,32 +217,20 @@ class ServerViewSet(viewsets.ReadOnlyModelViewSet):
 
         members_by_user_id: dict[int, dict] = {}
 
-        def get_profile(user):
-            try:
-                return user.profile
-            except Exception:
-                return None
-
-        def to_display_name(user):
-            profile = get_profile(user)
-            if profile and profile.display_name:
-                return profile.display_name
-            return user.email.split("@")[0]
-
-        def to_avatar_url(user):
-            profile = get_profile(user)
-            if profile and profile.avatar:
-                return request.build_absolute_uri(profile.avatar.url)
-            return None
-
         def to_custom_status(user):
-            profile = get_profile(user)
+            try:
+                profile = user.profile
+            except Exception:
+                profile = None
             if profile and profile.custom_status:
                 return profile.custom_status
             return None
 
         def to_is_online(user):
-            profile = get_profile(user)
+            try:
+                profile = user.profile
+            except Exception:
+                profile = None
             if profile:
                 return bool(profile.is_online)
             return False
@@ -147,10 +243,10 @@ class ServerViewSet(viewsets.ReadOnlyModelViewSet):
             )
             members_by_user_id[user.pk] = {
                 "uuid": user.uuid,
-                "display_name": to_display_name(user),
+                "display_name": build_user_display_name(user),
                 "is_online": to_is_online(user),
                 "roles": [{"uuid": role.uuid, "name": role.name} for role in roles],
-                "avatar_url": to_avatar_url(user),
+                "avatar_url": build_user_avatar_url(user, request),
                 "custom_status": to_custom_status(user),
             }
 
@@ -158,10 +254,10 @@ class ServerViewSet(viewsets.ReadOnlyModelViewSet):
         if owner.pk not in members_by_user_id:
             members_by_user_id[owner.pk] = {
                 "uuid": owner.uuid,
-                "display_name": to_display_name(owner),
+                "display_name": build_user_display_name(owner),
                 "is_online": to_is_online(owner),
                 "roles": [],
-                "avatar_url": to_avatar_url(owner),
+                "avatar_url": build_user_avatar_url(owner, request),
                 "custom_status": to_custom_status(owner),
             }
 

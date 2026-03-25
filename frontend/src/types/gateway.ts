@@ -8,6 +8,23 @@ export type Channel = {
   topic?: string | null;
   isPublic?: boolean;
   is_public?: boolean;
+  voiceOccupants?: VoiceOccupant[];
+  voice_occupants?: VoiceOccupant[];
+};
+
+export type VoiceOccupant = {
+  userUuid?: string;
+  user_uuid?: string;
+  displayName?: string;
+  display_name?: string;
+  avatarUrl?: string | null;
+  avatar_url?: string | null;
+  isMuted?: boolean;
+  is_muted?: boolean;
+  isSpeaking?: boolean;
+  is_speaking?: boolean;
+  audioLevel?: number;
+  audio_level?: number;
 };
 
 export type Server = {
@@ -88,6 +105,15 @@ export type PresenceMembersChangedPayload = {
   serverUuid?: string;
   server_uuid?: string;
   reason?: string;
+  timestamp?: string;
+};
+
+export type VoiceMembersChangedPayload = {
+  serverUuid?: string;
+  server_uuid?: string;
+  channelUuid?: string;
+  channel_uuid?: string;
+  occupants?: VoiceOccupant[];
   timestamp?: string;
 };
 

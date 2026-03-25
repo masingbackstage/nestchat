@@ -3,6 +3,8 @@ import type {
   Message,
   PresenceMembersChangedPayload,
   PresenceStatusChangedPayload,
+  VoiceMembersChangedPayload,
+  VoiceOccupant,
 } from '../types/gateway';
 import type { DMMessage } from '../types/gateway';
 
@@ -25,6 +27,7 @@ export type GatewayEventHandlerDeps = {
   updateDMConversationPreview: (conversationUuid: string, message: DMMessage) => void;
   incrementDMUnread: (conversationUuid: string) => void;
   clearDMUnread: (conversationUuid: string) => void;
+  applyVoiceMembersChanged: (payload: VoiceMembersChangedPayload) => void;
   getActiveChannelUuid: () => string | null;
   getActiveDMConversationUuid: () => string | null;
 };
@@ -125,6 +128,17 @@ function mapDMMessage(payload: ChatGatewayPayload, deps: GatewayEventHandlerDeps
   };
 }
 
+function mapVoiceOccupants(
+  payload: VoiceMembersChangedPayload,
+  deps: GatewayEventHandlerDeps,
+): VoiceOccupant[] {
+  return (payload.occupants ?? []).map((occupant) => ({
+    user_uuid: occupant.userUuid ?? occupant.user_uuid ?? '',
+    display_name: occupant.displayName ?? occupant.display_name ?? 'Unknown user',
+    avatar_url: deps.toApiAbsoluteUrl(occupant.avatarUrl ?? occupant.avatar_url ?? null),
+  }));
+}
+
 export function createGatewayEventHandler(deps: GatewayEventHandlerDeps) {
   return function handleGatewayEvent(event: GatewayMessageEvent): void {
     const moduleName = String(event.module ?? '').toLowerCase();
@@ -174,6 +188,15 @@ export function createGatewayEventHandler(deps: GatewayEventHandlerDeps) {
         return;
       }
       void deps.ensureServerMembers(serverUuid, true);
+      return;
+    }
+
+    if (moduleName === 'voice' && actionName === 'members_changed') {
+      const payload = event.payload as VoiceMembersChangedPayload;
+      deps.applyVoiceMembersChanged({
+        ...payload,
+        occupants: mapVoiceOccupants(payload, deps),
+      });
       return;
     }
 

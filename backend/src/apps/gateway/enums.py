@@ -4,6 +4,7 @@ from django.db.models import TextChoices
 class ModuleType(TextChoices):
     CHAT = ("CHAT", "chat")
     PRESENCE = ("PRESENCE", "presence")
+    VOICE = ("VOICE", "voice")
     SYSTEM = ("SYSTEM", "system")
 
 

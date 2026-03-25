@@ -17,6 +17,7 @@ function createDeps(): GatewayEventHandlerDeps {
     updateDMConversationPreview: vi.fn(),
     incrementDMUnread: vi.fn(),
     clearDMUnread: vi.fn(),
+    applyVoiceMembersChanged: vi.fn(),
     getActiveChannelUuid: vi.fn(() => null),
     getActiveDMConversationUuid: vi.fn(() => null),
   };
@@ -55,6 +56,41 @@ describe('createGatewayEventHandler', () => {
     expect(deps.pushToast).toHaveBeenCalledWith({
       type: 'error',
       message: 'Unexpected DM error',
+    });
+  });
+
+  it('maps voice occupancy updates', () => {
+    const deps = createDeps();
+    const handler = createGatewayEventHandler(deps);
+
+    handler({
+      module: 'voice',
+      action: 'members_changed',
+      payload: {
+        server_uuid: 'server-1',
+        channel_uuid: 'voice-1',
+        occupants: [
+          {
+            user_uuid: 'user-1',
+            display_name: 'User 1',
+            avatar_url: '/avatars/user-1.png',
+          },
+        ],
+        timestamp: '2026-03-25T10:00:00.000Z',
+      },
+    });
+
+    expect(deps.applyVoiceMembersChanged).toHaveBeenCalledWith({
+      server_uuid: 'server-1',
+      channel_uuid: 'voice-1',
+      occupants: [
+        {
+          user_uuid: 'user-1',
+          display_name: 'User 1',
+          avatar_url: '/avatars/user-1.png',
+        },
+      ],
+      timestamp: '2026-03-25T10:00:00.000Z',
     });
   });
 });

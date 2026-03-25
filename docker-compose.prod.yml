@@ -66,9 +66,18 @@ services:
     image: livekit/livekit-server:latest
     container_name: nestchat_livekit_prod
     restart: unless-stopped
-    command: --dev --bind 0.0.0.0
+    env_file:
+      - .env.prod
+    entrypoint:
+      - /bin/sh
+      - -ec
+      - |
+        printf 'keys:\n  %s: %s\nwebhook:\n  api_key: "%s"\n  urls:\n    - "%s"\n' \
+          "$$LIVEKIT_API_KEY" "$$LIVEKIT_API_SECRET" "$$LIVEKIT_API_KEY" "$$LIVEKIT_WEBHOOK_URL" \
+          >/tmp/livekit.yaml
+        exec /livekit-server --dev --bind 0.0.0.0 --config /tmp/livekit.yaml
     environment:
-      LIVEKIT_KEYS: "${LIVEKIT_API_KEY}: ${LIVEKIT_API_SECRET}"
+      LIVEKIT_WEBHOOK_URL: http://backend:8000/api/servers/livekit/webhook/
     ports:
       - "7880:7880"
       - "7881:7881"

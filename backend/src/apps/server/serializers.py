@@ -5,11 +5,62 @@ from .models.server import Server
 from .models.server_emoji import ServerEmoji
 
 
+def get_user_profile(user):
+    try:
+        return user.profile
+    except Exception:
+        return None
+
+
+def build_user_display_name(user):
+    profile = get_user_profile(user)
+    if profile and profile.display_name:
+        return profile.display_name
+    return user.email.split("@")[0]
+
+
+def build_user_avatar_url(user, request=None):
+    profile = get_user_profile(user)
+    if not profile or not profile.avatar:
+        return None
+
+    try:
+        avatar_url = profile.avatar.url
+    except Exception:
+        return None
+
+    if request:
+        return request.build_absolute_uri(avatar_url)
+    return avatar_url
+
+
+def build_voice_occupant_payload(user, request=None):
+    return {
+        "user_uuid": str(user.uuid),
+        "display_name": build_user_display_name(user),
+        "avatar_url": build_user_avatar_url(user, request),
+    }
+
+
+class VoiceOccupantSerializer(serializers.Serializer):
+    user_uuid = serializers.UUIDField()
+    display_name = serializers.CharField()
+    avatar_url = serializers.CharField(allow_null=True, required=False)
+
+
 class ChannelShortSerializer(serializers.ModelSerializer):
+    voice_occupants = serializers.SerializerMethodField()
+
+    def get_voice_occupants(self, obj):
+        if obj.channel_type != "VOICE":
+            return []
+        request = self.context.get("request")
+        occupancies = obj.voice_occupants.all()
+        return [build_voice_occupant_payload(occupancy.user, request) for occupancy in occupancies]
 
     class Meta:
         model = Channel
-        fields = ["uuid", "name", "channel_emoji", "channel_type"]
+        fields = ["uuid", "name", "channel_emoji", "channel_type", "voice_occupants"]
 
 
 class ServerListSerializer(serializers.ModelSerializer):
@@ -68,6 +119,14 @@ class ChannelCreateSerializer(serializers.Serializer):
 
 class ChannelDetailSerializer(serializers.ModelSerializer):
     allowed_roles = serializers.PrimaryKeyRelatedField(many=True, read_only=True)
+    voice_occupants = serializers.SerializerMethodField()
+
+    def get_voice_occupants(self, obj):
+        if obj.channel_type != "VOICE":
+            return []
+        request = self.context.get("request")
+        occupancies = obj.voice_occupants.all()
+        return [build_voice_occupant_payload(occupancy.user, request) for occupancy in occupancies]
 
     class Meta:
         model = Channel
@@ -79,6 +138,7 @@ class ChannelDetailSerializer(serializers.ModelSerializer):
             "topic",
             "is_public",
             "allowed_roles",
+            "voice_occupants",
             "created_at",
         ]
 
