@@ -264,7 +264,7 @@ class ServerViewSet(viewsets.ReadOnlyModelViewSet):
 
         payload = {
             "token": token,
-            "livekit_url": settings.LIVEKIT_URL,
+            "livekit_public_url": settings.LIVEKIT_PUBLIC_URL,
             "room_name": room_name,
             "identity": identity,
             "expires_in": settings.LIVEKIT_TOKEN_TTL_SECONDS,
