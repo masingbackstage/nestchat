@@ -158,10 +158,6 @@
     }
   }
 
-  function openAppAuth(mode: 'login' | 'register'): void {
-    window.location.href = buildAppUrl('/app', mode);
-  }
-
   function clearReadStateCache(): void {
     lastReadMarkerByChannel = {};
     readStateFetchedAtByChannel = {};
