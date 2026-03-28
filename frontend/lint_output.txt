@@ -1,0 +1,45 @@
+
+> frontend@0.0.0 lint
+> eslint . --max-warnings=0
+
+
+/home/masingneckstage/Projects/nestchat/frontend/src/lib/emoji.ts
+  3:21  error  Array type using 'Array<T>' is forbidden. Use 'T[]' instead  @typescript-eslint/array-type
+
+/home/masingneckstage/Projects/nestchat/frontend/src/modules/dm/friends/store.test.ts
+   4:1  warning  Missing return type on function  @typescript-eslint/explicit-function-return-type
+  24:1  warning  Missing return type on function  @typescript-eslint/explicit-function-return-type
+
+/home/masingneckstage/Projects/nestchat/frontend/src/modules/dm/messages/store.test.ts
+   4:1  warning  Missing return type on function  @typescript-eslint/explicit-function-return-type
+  26:1  warning  Missing return type on function  @typescript-eslint/explicit-function-return-type
+
+/home/masingneckstage/Projects/nestchat/frontend/src/modules/dm/storage.test.ts
+  5:1  warning  Missing return type on function  @typescript-eslint/explicit-function-return-type
+
+/home/masingneckstage/Projects/nestchat/frontend/src/modules/voice/VoiceVideoGrid.svelte
+  137:48  error  Expected { after 'if' condition  curly
+  138:48  error  Expected { after 'if' condition  curly
+  146:21  error  Expected { after 'if' condition  curly
+  147:41  error  Expected { after 'if' condition  curly
+  148:21  error  Expected { after 'if' condition  curly
+  149:21  error  Expected { after 'if' condition  curly
+  159:34  error  Unexpected empty arrow function  @typescript-eslint/no-empty-function
+  167:40  error  Unexpected empty arrow function  @typescript-eslint/no-empty-function
+  178:16  error  Expected { after 'if' condition  curly
+  181:46  error  Unexpected empty arrow function  @typescript-eslint/no-empty-function
+  183:47  error  Unexpected empty arrow function  @typescript-eslint/no-empty-function
+
+/home/masingneckstage/Projects/nestchat/frontend/src/modules/voice/storage.test.ts
+  4:1  warning  Missing return type on function  @typescript-eslint/explicit-function-return-type
+
+/home/masingneckstage/Projects/nestchat/frontend/src/modules/voice/store.test.ts
+  4:1  warning  Missing return type on function  @typescript-eslint/explicit-function-return-type
+
+/home/masingneckstage/Projects/nestchat/frontend/src/modules/voice/store.ts
+  781:14  error  'err' is defined but never used           @typescript-eslint/no-unused-vars
+  816:12  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+
+✖ 21 problems (14 errors, 7 warnings)
+  8 errors and 0 warnings potentially fixable with the `--fix` option.
+

@@ -8,8 +8,9 @@
   import { unreadCountByChannel } from '../chat/messages';
   import { DMConversationList } from '../dm';
   import type { Channel, VoiceOccupant } from '../../types/gateway';
-  import { joinVoiceCall } from '../voice/store';
+  import { joinVoiceCall, voiceState } from '../voice/store';
   import { voiceOccupantsByChannel } from '../voice/occupancy';
+  import VoiceDock from '../voice/VoiceDock.svelte';
 
   let isCreateModalOpen = false;
   let isCreatingChannel = false;
@@ -236,6 +237,12 @@
     {/if}
   {:else}
     <DMConversationList />
+  {/if}
+
+  {#if $voiceState.status !== 'idle'}
+    <div class="mt-auto border-t border-white/10 bg-surface-900/50 shrink-0">
+      <VoiceDock isMini={true} />
+    </div>
   {/if}
 </nav>
 

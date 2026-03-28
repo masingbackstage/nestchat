@@ -71,7 +71,7 @@
   } from './modules/dm';
   import { loadDMUICache, saveDMUICache } from './modules/dm/storage';
   import { DMWindow } from './modules/dm';
-  import VoiceDock from './modules/voice/VoiceDock.svelte';
+  import VoiceVideoGrid from './modules/voice/VoiceVideoGrid.svelte';
   import { leaveVoiceCall } from './modules/voice/store';
   import {
     applyVoiceMembersChanged,
@@ -134,11 +134,7 @@
     }
   }
 
-  function navigate(
-    path: '/' | '/app',
-    mode?: 'login' | 'register',
-    replaceState = false,
-  ): void {
+  function navigate(path: '/' | '/app', mode?: 'login' | 'register', replaceState = false): void {
     if (path === '/app') {
       const targetUrl = buildAppUrl('/app', mode);
       const currentUrl = `${window.location.origin}${window.location.pathname}${window.location.search}`;
@@ -478,7 +474,11 @@
       />
       <ChannelList />
       {#if $activeServer}
-        <ChatWindow />
+        {#if $activeChannel && String($activeChannel.channelType ?? $activeChannel.channel_type ?? '').toUpperCase() === 'VOICE'}
+          <VoiceVideoGrid />
+        {:else}
+          <ChatWindow />
+        {/if}
         <MemberSidebar />
       {:else}
         <DMWindow />
@@ -499,5 +499,4 @@
   {/if}
 {/if}
 
-<VoiceDock />
 <ToastViewport />

@@ -10,6 +10,8 @@ function normalizeOccupant(occupant: VoiceOccupant): VoiceOccupant {
   const isMuted = Boolean(occupant.isMuted ?? occupant.is_muted ?? false);
   const isSpeaking = Boolean(occupant.isSpeaking ?? occupant.is_speaking ?? false);
   const audioLevel = Number(occupant.audioLevel ?? occupant.audio_level ?? 0);
+  const isCameraOn = Boolean(occupant.isCameraOn ?? occupant.is_camera_on ?? false);
+  const isScreenSharing = Boolean(occupant.isScreenSharing ?? occupant.is_screen_sharing ?? false);
 
   return {
     userUuid,
@@ -24,6 +26,10 @@ function normalizeOccupant(occupant: VoiceOccupant): VoiceOccupant {
     is_speaking: isSpeaking,
     audioLevel,
     audio_level: audioLevel,
+    isCameraOn,
+    is_camera_on: isCameraOn,
+    isScreenSharing,
+    is_screen_sharing: isScreenSharing,
   };
 }
 
@@ -101,6 +107,36 @@ export function setVoiceMutedState(channelUuid: string, mutedByUserUuid: Record<
           ...occupant,
           isMuted,
           is_muted: isMuted,
+        };
+      }),
+    };
+  });
+}
+
+export function setVoiceMediaState(
+  channelUuid: string,
+  mediaByUserUuid: Record<string, { camera: boolean; screen: boolean }>,
+): void {
+  voiceOccupantsByChannel.update((current) => {
+    const occupants = current[channelUuid] ?? [];
+    if (occupants.length === 0) {
+      return current;
+    }
+
+    return {
+      ...current,
+      [channelUuid]: occupants.map((occupant) => {
+        const userUuid = occupant.userUuid ?? occupant.user_uuid ?? '';
+        const media = mediaByUserUuid[userUuid];
+        if (!media) {
+          return occupant;
+        }
+        return {
+          ...occupant,
+          isCameraOn: media.camera,
+          is_camera_on: media.camera,
+          isScreenSharing: media.screen,
+          is_screen_sharing: media.screen,
         };
       }),
     };

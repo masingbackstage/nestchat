@@ -2,11 +2,14 @@ import { writable, get } from 'svelte/store';
 import {
   AudioPresets,
   type LocalAudioTrack,
+  type LocalVideoTrack,
   type Participant,
   Room,
   RoomEvent,
+  type ScreenShareCaptureOptions,
   Track,
   createLocalAudioTrack,
+  createLocalVideoTrack,
   type RemoteParticipant,
   type RemoteTrack,
   type RemoteTrackPublication,
@@ -14,7 +17,12 @@ import {
 import { getCurrentUserUuid } from '../../lib/auth';
 import { ensureServerMembers, membersByServer } from '../servers/members/store';
 import { fetchVoiceToken } from './api';
-import { setVoiceMutedState, setVoiceOccupants, setVoiceSpeakingState } from './occupancy';
+import {
+  setVoiceMediaState,
+  setVoiceMutedState,
+  setVoiceOccupants,
+  setVoiceSpeakingState,
+} from './occupancy';
 import {
   clampVoiceThreshold,
   DEFAULT_VOICE_HANGOVER_MS,
@@ -31,12 +39,22 @@ type VoiceState = {
   roomName: string | null;
   participants: number;
   muted: boolean;
+  cameraEnabled: boolean;
+  screenShareEnabled: boolean;
   error: string | null;
   channelName: string | null;
   inputLevel: number;
   gateOpen: boolean;
   threshold: number;
   hangoverMs: number;
+};
+
+export type RemoteVideoEntry = {
+  participantIdentity: string;
+  participantName: string;
+  trackSid: string;
+  source: Track.Source;
+  mediaStream: MediaStream;
 };
 
 type VoiceSettings = {
@@ -51,6 +69,8 @@ const initial: VoiceState = {
   roomName: null,
   participants: 0,
   muted: false,
+  cameraEnabled: false,
+  screenShareEnabled: false,
   error: null,
   channelName: null,
   inputLevel: 0,
@@ -90,9 +110,13 @@ let voiceSettings: VoiceSettings = {
 };
 
 export const voiceState = writable<VoiceState>(initial);
+export const remoteVideoTracks = writable<RemoteVideoEntry[]>([]);
+export const localVideoStream = writable<MediaStream | null>(null);
+export const localScreenStream = writable<MediaStream | null>(null);
 
 let room: Room | null = null;
 let localAudioTrack: LocalAudioTrack | null = null;
+let localVideoTrack: LocalVideoTrack | null = null;
 let localAudioGraph: LocalAudioGraph | null = null;
 let suppressPresenceCueUntilMs = 0;
 
@@ -209,7 +233,11 @@ function syncCurrentRoomActiveSpeakers(r: Room): void {
 
   for (const participant of r.activeSpeakers as Participant[]) {
     const participantUuid =
-      participant === r.localParticipant ? selfUuid : ('identity' in participant ? participant.identity : null);
+      participant === r.localParticipant
+        ? selfUuid
+        : 'identity' in participant
+          ? participant.identity
+          : null;
     if (!participantUuid) {
       continue;
     }
@@ -323,6 +351,45 @@ function getPublicationSid(publication: RemoteTrackPublication): string {
   return publication.trackSid;
 }
 
+function attachRemoteVideo(
+  track: RemoteTrack,
+  publication: RemoteTrackPublication,
+  participant: RemoteParticipant,
+): void {
+  if (track.kind !== Track.Kind.Video) {
+    return;
+  }
+
+  const mediaStreamTrack = track.mediaStreamTrack;
+  if (!mediaStreamTrack) {
+    return;
+  }
+
+  const sid = getPublicationSid(publication);
+  if (!sid) {
+    return;
+  }
+
+  const stream = new MediaStream([mediaStreamTrack]);
+  const entry: RemoteVideoEntry = {
+    participantIdentity: participant.identity,
+    participantName: participant.name ?? participant.identity,
+    trackSid: sid,
+    source: publication.source,
+    mediaStream: stream,
+  };
+
+  remoteVideoTracks.update((prev) => {
+    const filtered = prev.filter((e) => e.trackSid !== sid);
+    return [...filtered, entry];
+  });
+}
+
+function detachRemoteVideo(publication: RemoteTrackPublication): void {
+  const sid = getPublicationSid(publication);
+  remoteVideoTracks.update((prev) => prev.filter((e) => e.trackSid !== sid));
+}
+
 function attachRemoteAudio(track: RemoteTrack, publication: RemoteTrackPublication): void {
   if (track.kind !== Track.Kind.Audio) {
     return;
@@ -397,6 +464,45 @@ function cleanupRemoteAudio(): void {
   remoteAudioGraphs.clear();
 }
 
+function syncCurrentRoomMediaState(r: Room): void {
+  const channelUuid = get(voiceState).channelUuid;
+  if (!channelUuid) {
+    return;
+  }
+
+  const selfUuid = getCurrentUserUuid();
+  const mediaByUserUuid: Record<string, { camera: boolean; screen: boolean }> = {};
+
+  if (selfUuid) {
+    mediaByUserUuid[selfUuid] = {
+      camera: get(voiceState).cameraEnabled,
+      screen: get(voiceState).screenShareEnabled,
+    };
+  }
+
+  for (const participant of r.remoteParticipants.values()) {
+    const participantUuid = participant.identity;
+    if (!participantUuid || participantUuid === selfUuid) {
+      continue;
+    }
+
+    let hasCamera = false;
+    let hasScreen = false;
+    for (const pub of participant.trackPublications.values()) {
+      if (pub.kind === Track.Kind.Video && pub.source === Track.Source.Camera) {
+        hasCamera = true;
+      }
+      if (pub.kind === Track.Kind.Video && pub.source === Track.Source.ScreenShare) {
+        hasScreen = true;
+      }
+    }
+
+    mediaByUserUuid[participantUuid] = { camera: hasCamera, screen: hasScreen };
+  }
+
+  setVoiceMediaState(channelUuid, mediaByUserUuid);
+}
+
 function bindRoomEvents(r: Room): void {
   const updateParticipants = (): void => {
     voiceState.update((s) => ({
@@ -418,15 +524,25 @@ function bindRoomEvents(r: Room): void {
       void playVoiceCue('leave').catch(ignorePromiseRejection);
     }
     detachParticipantRemoteAudio(participant);
+    for (const pub of participant.trackPublications.values()) {
+      detachRemoteVideo(pub);
+    }
     updateParticipants();
   });
 
-  r.on(RoomEvent.TrackSubscribed, (track: RemoteTrack, publication: RemoteTrackPublication) => {
-    attachRemoteAudio(track, publication);
-  });
+  r.on(
+    RoomEvent.TrackSubscribed,
+    (track: RemoteTrack, publication: RemoteTrackPublication, participant: RemoteParticipant) => {
+      attachRemoteAudio(track, publication);
+      attachRemoteVideo(track, publication, participant);
+      syncCurrentRoomMediaState(r);
+    },
+  );
 
   r.on(RoomEvent.TrackUnsubscribed, (_track: RemoteTrack, publication: RemoteTrackPublication) => {
     detachRemoteAudio(publication);
+    detachRemoteVideo(publication);
+    syncCurrentRoomMediaState(r);
   });
 
   r.on(RoomEvent.ActiveSpeakersChanged, () => {
@@ -443,7 +559,18 @@ function bindRoomEvents(r: Room): void {
 
   r.on(RoomEvent.Disconnected, () => {
     cleanupRemoteAudio();
+    remoteVideoTracks.set([]);
+    localVideoStream.set(null);
+    localScreenStream.set(null);
     voiceState.set({ ...initial });
+  });
+
+  r.on(RoomEvent.LocalTrackPublished, () => {
+    syncCurrentRoomMediaState(r);
+  });
+
+  r.on(RoomEvent.LocalTrackUnpublished, () => {
+    syncCurrentRoomMediaState(r);
   });
 }
 
@@ -527,6 +654,8 @@ export async function joinVoiceCall(
       roomName: tokenData.roomName,
       participants: room?.numParticipants ?? 1,
       muted: false,
+      cameraEnabled: false,
+      screenShareEnabled: false,
       error: null,
       threshold: voiceSettings.threshold,
       hangoverMs: voiceSettings.hangoverMs,
@@ -550,7 +679,15 @@ export async function leaveVoiceCall(): Promise<void> {
   try {
     await cleanupLocalAudio();
 
+    if (localVideoTrack) {
+      localVideoTrack.stop();
+      localVideoTrack = null;
+    }
+
     cleanupRemoteAudio();
+    remoteVideoTracks.set([]);
+    localVideoStream.set(null);
+    localScreenStream.set(null);
 
     if (room) {
       room.disconnect();
@@ -614,4 +751,92 @@ export async function reconnectVoiceCall(): Promise<void> {
     lastJoinTarget.channelUuid,
     lastJoinTarget.channelName,
   );
+}
+
+export async function toggleCamera(): Promise<void> {
+  if (!room || get(voiceState).status !== 'connected') {
+    return;
+  }
+
+  const current = get(voiceState).cameraEnabled;
+
+  if (current) {
+    if (localVideoTrack) {
+      await room.localParticipant.unpublishTrack(localVideoTrack);
+      localVideoTrack.stop();
+      localVideoTrack = null;
+    }
+    localVideoStream.set(null);
+    voiceState.update((s) => ({ ...s, cameraEnabled: false }));
+  } else {
+    try {
+      localVideoTrack = await createLocalVideoTrack({
+        facingMode: 'user',
+      });
+      localVideoTrack.source = Track.Source.Camera;
+      await room.localParticipant.publishTrack(localVideoTrack);
+
+      const stream = new MediaStream([localVideoTrack.mediaStreamTrack]);
+      localVideoStream.set(stream);
+      voiceState.update((s) => ({ ...s, cameraEnabled: true }));
+    } catch {
+      if (localVideoTrack) {
+        localVideoTrack.stop();
+        localVideoTrack = null;
+      }
+      localVideoStream.set(null);
+      voiceState.update((s) => ({ ...s, cameraEnabled: false }));
+    }
+  }
+
+  if (room) {
+    syncCurrentRoomMediaState(room);
+  }
+}
+
+export async function toggleScreenShare(): Promise<void> {
+  if (!room || get(voiceState).status !== 'connected') {
+    return;
+  }
+
+  const current = get(voiceState).screenShareEnabled;
+
+  if (current) {
+    await room.localParticipant.setScreenShareEnabled(false);
+    localScreenStream.set(null);
+    voiceState.update((s) => ({ ...s, screenShareEnabled: false }));
+  } else {
+    try {
+      const screenShareOptions: ScreenShareCaptureOptions = {
+        video: {
+          displaySurface: 'monitor',
+        },
+        resolution: { width: 1920, height: 1080, frameRate: 30 },
+        systemAudio: 'include',
+      };
+      await room.localParticipant.setScreenShareEnabled(true, screenShareOptions);
+      const screenPub = room.localParticipant.getTrackPublication(Track.Source.ScreenShare);
+      if (screenPub?.track?.mediaStreamTrack) {
+        const stream = new MediaStream([screenPub.track.mediaStreamTrack]);
+        localScreenStream.set(stream);
+
+        screenPub.track.mediaStreamTrack.addEventListener('ended', () => {
+          localScreenStream.set(null);
+          voiceState.update((s) => ({ ...s, screenShareEnabled: false }));
+          if (room) {
+            syncCurrentRoomMediaState(room);
+          }
+        });
+      }
+
+      voiceState.update((s) => ({ ...s, screenShareEnabled: true }));
+    } catch {
+      localScreenStream.set(null);
+      voiceState.update((s) => ({ ...s, screenShareEnabled: false }));
+    }
+  }
+
+  if (room) {
+    syncCurrentRoomMediaState(room);
+  }
 }

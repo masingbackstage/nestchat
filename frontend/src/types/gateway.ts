@@ -25,6 +25,10 @@ export type VoiceOccupant = {
   is_speaking?: boolean;
   audioLevel?: number;
   audio_level?: number;
+  isCameraOn?: boolean;
+  is_camera_on?: boolean;
+  isScreenSharing?: boolean;
+  is_screen_sharing?: boolean;
 };
 
 export type Server = {
