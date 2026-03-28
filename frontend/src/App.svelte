@@ -193,7 +193,9 @@
       navigate('/', undefined, true);
       return;
     }
-    navigate('/app', 'login', true);
+    const urlMode = new URLSearchParams(window.location.search).get('mode');
+    const preservedMode: 'login' | 'register' = urlMode === 'register' ? 'register' : 'login';
+    navigate('/app', preservedMode, true);
   }
 
   const handleGatewayEvent = createGatewayEventHandler({
