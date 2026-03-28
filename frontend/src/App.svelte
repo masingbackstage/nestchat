@@ -444,10 +444,10 @@
 {:else if routePath === '/'}
   <LandingPage
     on:startLogin={() => {
-      openAppAuth('login');
+      navigate('/app', 'login');
     }}
     on:startRegister={() => {
-      openAppAuth('register');
+      navigate('/app', 'register');
     }}
   />
 {:else if !isAuthenticated}

@@ -21,6 +21,7 @@ import {
   nextVoiceGateState,
   type VoiceGateState,
 } from './gate';
+import { playVoiceCue, primeVoiceSounds } from './sounds';
 import { loadVoiceThreshold, saveVoiceThreshold } from './storage';
 
 type VoiceState = {
@@ -93,10 +94,15 @@ export const voiceState = writable<VoiceState>(initial);
 let room: Room | null = null;
 let localAudioTrack: LocalAudioTrack | null = null;
 let localAudioGraph: LocalAudioGraph | null = null;
+let suppressPresenceCueUntilMs = 0;
 
 const remoteAudioGraphs = new Map<string, RemoteAudioGraph>();
 
 const ignorePromiseRejection = (): undefined => undefined;
+
+function shouldPlayPresenceCue(): boolean {
+  return Date.now() >= suppressPresenceCueUntilMs;
+}
 
 function setError(message: string): void {
   voiceState.update((s) => ({ ...s, status: 'error', error: message }));
@@ -400,9 +406,17 @@ function bindRoomEvents(r: Room): void {
     syncCurrentRoomOccupants(r);
   };
 
-  r.on(RoomEvent.ParticipantConnected, updateParticipants);
+  r.on(RoomEvent.ParticipantConnected, () => {
+    if (shouldPlayPresenceCue()) {
+      void playVoiceCue('join').catch(ignorePromiseRejection);
+    }
+    updateParticipants();
+  });
 
   r.on(RoomEvent.ParticipantDisconnected, (participant: RemoteParticipant) => {
+    if (shouldPlayPresenceCue()) {
+      void playVoiceCue('leave').catch(ignorePromiseRejection);
+    }
     detachParticipantRemoteAudio(participant);
     updateParticipants();
   });
@@ -438,6 +452,8 @@ export async function joinVoiceCall(
   channelUuid: string,
   channelName: string,
 ): Promise<void> {
+  await primeVoiceSounds().catch(ignorePromiseRejection);
+  suppressPresenceCueUntilMs = Date.now() + 1200;
   lastJoinTarget = { serverUuid, channelUuid, channelName };
 
   const current = get(voiceState);
@@ -516,6 +532,7 @@ export async function joinVoiceCall(
       hangoverMs: voiceSettings.hangoverMs,
     }));
     syncCurrentRoomOccupants(room);
+    void playVoiceCue('join').catch(ignorePromiseRejection);
   } catch (err) {
     await leaveVoiceCall();
     setError(err instanceof Error ? err.message : 'Failed to join voice call.');
@@ -524,6 +541,12 @@ export async function joinVoiceCall(
 
 export async function leaveVoiceCall(): Promise<void> {
   const channelUuid = get(voiceState).channelUuid;
+  const wasConnected = get(voiceState).status === 'connected';
+  suppressPresenceCueUntilMs = Date.now() + 700;
+  if (wasConnected) {
+    await primeVoiceSounds().catch(ignorePromiseRejection);
+    void playVoiceCue('leave').catch(ignorePromiseRejection);
+  }
   try {
     await cleanupLocalAudio();
 
@@ -546,6 +569,8 @@ export async function toggleMute(): Promise<void> {
     return;
   }
 
+  await primeVoiceSounds().catch(ignorePromiseRejection);
+
   const nextMuted = !get(voiceState).muted;
   voiceState.update((s) => ({ ...s, muted: nextMuted, gateOpen: nextMuted ? false : s.gateOpen }));
 
@@ -560,6 +585,7 @@ export async function toggleMute(): Promise<void> {
   }
 
   syncLocalTransmissionEnabled();
+  void playVoiceCue(nextMuted ? 'mute' : 'unmute').catch(ignorePromiseRejection);
   if (room) {
     syncCurrentRoomMutedState(room);
   }
